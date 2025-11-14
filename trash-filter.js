@@ -2,8 +2,17 @@
     'use strict';
 
     // =========================================================================
-    // I. ФИЛЬТРЫ ЗАПРОСОВ (Pre-Filters)
-    // Модифицируют URL запроса перед его отправкой на TMDB (или прокси).
+    // I. ОБЪЯВЛЕНИЕ ПЕРЕМЕННЫХ И REGEX (Оптимизация)
+    // Объявляем Regex один раз для увеличения производительности.
+    // =========================================================================
+
+    // Строгий белый список для Title: разрешает только кириллицу, цифры, пробелы и пунктуацию.
+    var allowedTitleCharsRegex = /^[А-Яа-яЁё0-9\s.,'":!?-]+$/; 
+    // Проверка на наличие хотя бы одной кириллицы ИЛИ цифры в названии.
+    var requiredTitleCharsRegex = /[А-Яа-яЁё0-9]/; 
+    
+    // =========================================================================
+    // II. ФИЛЬТРЫ ЗАПРОСОВ (Pre-Filters)
     // =========================================================================
     var preFilters = {
         filters: [
@@ -32,29 +41,23 @@
     };
 
     // =========================================================================
-    // II. ФИЛЬТРЫ РЕЗУЛЬТАТОВ (Post-Filters)
-    // Обрабатывают полученный массив данных, применяя правила белого списка.
+    // III. ФИЛЬТРЫ РЕЗУЛЬТАТОВ (Post-Filters)
     // =========================================================================
     var postFilters = {
         filters: [
             function(results) {
-                // Строгий белый список для Title: разрешает только кириллицу, цифры, пробелы и пунктуацию.
-                var allowedTitleCharsRegex = /^[А-Яа-яЁё0-9\s.,'":!?-]+$/; 
-                // Проверка на наличие хотя бы одной кириллицы ИЛИ цифры в названии.
-                var requiredTitleCharsRegex = /[А-Яа-яЁё0-9]/; 
-                
                 return results.filter(function(item) {
                     if (!item) return true;
                     
-                    // НОВАЯ ПРОВЕРКА: Удаляем, если отсутствует дата релиза.
+                    // 1. Проверка на наличие даты релиза.
                     if (!item.release_date) {
                         return false;
                     }
                     
-                    // Условие 1: Оригинальный язык - Русский
+                    // 2. Условие: Оригинальный язык - Русский
                     var isRussian = (item.original_language && item.original_language.toLowerCase() === 'ru');
                     
-                    // Условие 2: Title соответствует строгому белому списку
+                    // 3. Условие: Title соответствует строгому белому списку
                     var isTitlePureCyrillicOrNumber = false;
 
                     if (item.title) {
@@ -66,7 +69,7 @@
                         isTitlePureCyrillicOrNumber = containsOnlyAllowedChars && containsRequiredChars;
                     }
                     
-                    // Белый список: Оставляем, если выполнено (Условие 1 ИЛИ Условие 2)
+                    // Белый список: Оставляем, если выполнено (Условие 2 ИЛИ Условие 3)
                     var keepItem = isRussian || isTitlePureCyrillicOrNumber;
 
                     return keepItem;
@@ -74,19 +77,21 @@
             }
         ],
         apply: function(results) {
-            var clone = Lampa.Arrays.clone(results);
+            // Удалено Lampa.Arrays.clone() для оптимизации
+            var filteredResults = results;
             for (var i = 0; i < this.filters.length; i++) {
-                clone = this.filters[i](results);
+                // Применяем фильтр к результату предыдущего фильтра
+                filteredResults = this.filters[i](filteredResults);
             }
-            return clone;
+            return filteredResults;
         }
     };
 
     // =========================================================================
-    // III. УТИЛИТЫ И ПРОВЕРКИ
+    // IV. УТИЛИТЫ И ПРОВЕРКИ
     // =========================================================================
 
-    // Проверяет, применим ли фильтр к данному URL (включая /person/ и прокси).
+    // Проверяет, применим ли фильтр к данному URL.
     function isFilterApplicable(baseUrl) {
         return baseUrl.indexOf('/3/') > -1
             && baseUrl.indexOf('/search') === -1;
@@ -103,7 +108,7 @@
     }
     
     // =========================================================================
-    // IV. ОСНОВНАЯ ЛОГИКА ПЛАГИНА (start)
+    // V. ОСНОВНАЯ ЛОГИКА ПЛАГИНА (start)
     // =========================================================================
 
     function start() {
@@ -113,7 +118,7 @@
 
         window.trash_filter_plugin = true;
 
-        // 1. Обработка видимости линии: Добавляет кнопку "Ещё".
+        // 1. Добавляет кнопку "Ещё".
         Lampa.Listener.follow('line', function (event) {
             if (event.type !== 'visible' || !hasMorePage(event.data)) {
                 return;
@@ -144,7 +149,7 @@
             lineHeader$.append(button);
         });
         
-        // 2. Обработка добавления элементов: Управляет навигацией.
+        // 2. Управляет навигацией (для кнопки "Ещё").
         Lampa.Listener.follow('line', function (event) {
             if (event.type !== 'append' || !hasMorePage(event.data)) {
                 return;
@@ -155,14 +160,14 @@
             }
         });
 
-        // 3. Перехват запроса перед отправкой: Применяет Pre-Filters.
+        // 3. Применяет Pre-Filters.
         Lampa.Listener.follow('before_send', function (event) {
             if (isFilterApplicable(event.url)) {
                 event.url = preFilters.apply(event.url);
             }
         });
 
-        // 4. Перехват успешного ответа: Применяет Post-Filters.
+        // 4. Применяет Post-Filters.
         Lampa.Listener.follow('request_secuses', function (event) {
             if (isFilterApplicable(event.params.url) && event.data && Array.isArray(event.data.results)) {
                 event.data.original_length = event.data.results.length;

@@ -44,18 +44,21 @@
                 var filteredResults = results.filter(function(item) {
                     if (!item) return true;
                     
+                    // 1. Проверка оригинального языка: RU
                     var isRussian = (item.original_language && item.original_language.toLowerCase() === 'ru');
+                    
+                    // 2. Проверка на кириллицу или цифры в названии
                     var hasCyrillicOrNumberInTitle = item.title && cyrillicOrNumberRegex.test(item.title);
                     
+                    // Условие белого списка: (Язык RU) ИЛИ (Название содержит кириллицу/цифры)
                     var keepItem = isRussian || hasCyrillicOrNumberInTitle;
 
                     if (!keepItem) {
                         // Логирование удаляемых элементов, которые не соответствуют белому списку
                         console.log('FILTERED OUT (УДАЛЕНО):', item.title, '| Lang:', item.original_language);
-                    } else {
-                        // Логирование оставляемых элементов (для контроля)
-                        // console.log('KEPT (ОСТАВЛЕНО):', item.title, '| Lang:', item.original_language, '| Is RU:', isRussian, '| Has Cy/Num:', hasCyrillicOrNumberInTitle);
                     }
+                    // Если вам нужно увидеть все элементы (оставляемые и удаляемые), раскомментируйте эту строку:
+                    // else { console.log('KEPT (ОСТАВЛЕНО):', item.title, '| Lang:', item.original_language, '| Is RU:', isRussian, '| Has Cy/Num:', hasCyrillicOrNumberInTitle); }
 
                     return keepItem;
                 });
@@ -82,7 +85,8 @@
     };
 
     function isFilterApplicable(baseUrl) {
-        var isApplicable = baseUrl.indexOf(Lampa.TMDB.api('')) > -1
+        // FIX: Использование '/3/' вместо Lampa.TMDB.api('') для поддержки кастомных API-хостов.
+        var isApplicable = baseUrl.indexOf('/3/') > -1
             && baseUrl.indexOf('/search') === -1
             && baseUrl.indexOf('/person/') === -1;
             
@@ -165,8 +169,7 @@
                 console.log('--- Post-filter SKIPPED (not applicable or no results) ---');
             }
         });
-        
-        // Добавляем логирование в перехватчик запросов, чтобы видеть, что URL был изменен preFilters
+
         Lampa.Listener.follow('before_send', function (event) {
             if (isFilterApplicable(event.url)) {
                 event.url = preFilters.apply(event.url);

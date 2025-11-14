@@ -46,7 +46,7 @@
                     // 1. Проверка оригинального языка
                     if (item.original_language) {
                         var lang = item.original_language.toLowerCase();
-                        if lang == 'ru' {
+                        if (lang == 'ru') {
                             return true; // Оставляем, если язык RU
                         }
                     }

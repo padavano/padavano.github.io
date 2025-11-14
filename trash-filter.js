@@ -21,9 +21,15 @@
         apply: function(baseUrl) {
             var resultUrl = baseUrl;
 
+            console.log('--- PRE-FILTERING: Start ---');
+            console.log('Original URL:', baseUrl);
+
             for (var i = 0; i < this.filters.length; i++) {
                 resultUrl = this.filters[i](resultUrl);
             }
+
+            console.log('Result URL:', resultUrl);
+            console.log('--- PRE-FILTERING: End ---');
 
             return resultUrl;
         }
@@ -34,46 +40,55 @@
             function(results) {
                 // Регулярное выражение для русской кириллицы (А-Яа-яЁё) ИЛИ цифр (0-9)
                 var cyrillicOrNumberRegex = /[А-Яа-яЁё0-9]/; 
-
-                return results.filter(function(item) {
-                    if (!item) {
-                        return true; // Оставляем пустые элементы
-                    }
-
-                    // 1. Проверка оригинального языка: RU
-                    var isRussian = (item.original_language && item.original_language.toLowerCase() === 'ru');
+                
+                var filteredResults = results.filter(function(item) {
+                    if (!item) return true;
                     
-                    // 2. Проверка на кириллицу или цифры в названии
+                    var isRussian = (item.original_language && item.original_language.toLowerCase() === 'ru');
                     var hasCyrillicOrNumberInTitle = item.title && cyrillicOrNumberRegex.test(item.title);
                     
-                    // Элемент остается, если выполнено условие: 
-                    // (Оригинальный язык RU) ИЛИ (В названии есть кириллица или цифры)
-                    if (isRussian || hasCyrillicOrNumberInTitle) {
-                        return true; 
+                    var keepItem = isRussian || hasCyrillicOrNumberInTitle;
+
+                    if (!keepItem) {
+                        // Логирование удаляемых элементов, которые не соответствуют белому списку
+                        console.log('FILTERED OUT (УДАЛЕНО):', item.title, '| Lang:', item.original_language);
+                    } else {
+                        // Логирование оставляемых элементов (для контроля)
+                        // console.log('KEPT (ОСТАВЛЕНО):', item.title, '| Lang:', item.original_language, '| Is RU:', isRussian, '| Has Cy/Num:', hasCyrillicOrNumberInTitle);
                     }
 
-                    // Все остальные элементы (не RU и без кириллицы/цифр в названии) удаляются.
-                    return false;
+                    return keepItem;
                 });
+                
+                return filteredResults;
             }
         ],
         apply: function(results) {
             var clone = Lampa.Arrays.clone(results);
+            var originalLength = results.length;
+            
+            console.log('--- POST-FILTERING: Start ---');
+            console.log('Original result count:', originalLength);
 
             for (var i = 0; i < this.filters.length; i++) {
-                // В оригинальном коде использовался 'results' вместо 'clone' 
-                // во второй части цикла, сохраняя исходное поведение.
-                clone = this.filters[i](results); 
+                clone = this.filters[i](results);
             }
+
+            console.log('Filtered result count:', clone.length);
+            console.log('--- POST-FILTERING: End ---');
 
             return clone;
         }
     };
 
     function isFilterApplicable(baseUrl) {
-        return baseUrl.indexOf(Lampa.TMDB.api('')) > -1
+        var isApplicable = baseUrl.indexOf(Lampa.TMDB.api('')) > -1
             && baseUrl.indexOf('/search') === -1
             && baseUrl.indexOf('/person/') === -1;
+            
+        console.log('isFilterApplicable check for URL:', baseUrl, '-> Result:', isApplicable);
+
+        return isApplicable;
     }
 
     function hasMorePage(data) {
@@ -89,6 +104,8 @@
         if (window.trash_filter_plugin) {
             return;
         }
+        
+        console.log('>>> TRASH FILTER PLUGIN STARTED <<<');
 
         window.trash_filter_plugin = true;
 
@@ -133,9 +150,26 @@
         });
 
         Lampa.Listener.follow('request_secuses', function (event) {
+            console.log('>>> request_secuses triggered <<<');
+            console.log('Request URL:', event.params.url);
+            
             if (isFilterApplicable(event.params.url) && event.data && Array.isArray(event.data.results)) {
+                
+                console.log('--- Post-filter is APPLICABLE, applying filter ---');
+                
                 event.data.original_length = event.data.results.length;
                 event.data.results = postFilters.apply(event.data.results);
+                
+                console.log('--- Post-filter applied successfully ---');
+            } else {
+                console.log('--- Post-filter SKIPPED (not applicable or no results) ---');
+            }
+        });
+        
+        // Добавляем логирование в перехватчик запросов, чтобы видеть, что URL был изменен preFilters
+        Lampa.Listener.follow('before_send', function (event) {
+            if (isFilterApplicable(event.url)) {
+                event.url = preFilters.apply(event.url);
             }
         });
     }

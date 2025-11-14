@@ -40,20 +40,32 @@
     var postFilters = {
         filters: [
             function(results) {
-                // Регулярное выражение для русской кириллицы (А-Яа-яЁё) ИЛИ цифр (0-9)
-                var cyrillicOrNumberRegex = /[А-Яа-яЁё0-9]/; 
+                // Белый список: разрешает ТОЛЬКО кириллицу (А-Яа-яЁё), цифры (0-9), пробелы и общую пунктуацию в названии.
+                // Строгая проверка с ^ и $ гарантирует, что НЕТ ЛАТИНИЦЫ ИЛИ ДРУГИХ СИМВОЛОВ.
+                var allowedTitleCharsRegex = /^[А-Яа-яЁё0-9\s.,'":!?-]+$/; 
+                // Проверка: название должно содержать хотя бы одну кириллицу ИЛИ цифру (для отсева названий из одной пунктуации)
+                var requiredTitleCharsRegex = /[А-Яа-яЁё0-9]/; 
                 
                 return results.filter(function(item) {
                     if (!item) return true;
                     
-                    // Условие 1: Оригинальный язык - Русский
+                    // Условие 1: Оригинальный язык - Русский (Приоритет)
                     var isRussian = (item.original_language && item.original_language.toLowerCase() === 'ru');
                     
-                    // Условие 2: В названии есть кириллица или цифры
-                    var hasCyrillicOrNumberInTitle = item.title && cyrillicOrNumberRegex.test(item.title);
+                    // Условие 2: Title соответствует строгому белому списку
+                    var isTitlePureCyrillicOrNumber = false;
+
+                    if (item.title) {
+                        // Проверка 2.1: Title не содержит посторонних символов (латиницы, иероглифов и т.п.)
+                        var containsOnlyAllowedChars = allowedTitleCharsRegex.test(item.title);
+                        // Проверка 2.2: Title содержит хотя бы один значимый символ (кириллицу или цифру)
+                        var containsRequiredChars = requiredTitleCharsRegex.test(item.title);
+                        
+                        isTitlePureCyrillicOrNumber = containsOnlyAllowedChars && containsRequiredChars;
+                    }
                     
                     // Белый список: Оставляем, если выполнено (Условие 1 ИЛИ Условие 2)
-                    var keepItem = isRussian || hasCyrillicOrNumberInTitle;
+                    var keepItem = isRussian || isTitlePureCyrillicOrNumber;
 
                     return keepItem;
                 });

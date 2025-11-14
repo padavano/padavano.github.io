@@ -1,12 +1,18 @@
 (function () {
     'use strict';
 
+    // =========================================================================
+    // I. ФИЛЬТРЫ ЗАПРОСОВ (Pre-Filters)
+    // Модифицируют URL запроса перед его отправкой на TMDB (или прокси).
+    // =========================================================================
     var preFilters = {
         filters: [
+            // Оставляет только элементы с количеством голосов >= 1
             function(baseUrl) {
                 baseUrl += '&vote_count.gte=' + 1;
                 return baseUrl;
             },
+            // Исключает элементы по заданным ключевым словам (keywords)
             function(baseUrl) {
                 var baseExcludedKeywords = [
                     '346488',
@@ -20,81 +26,62 @@
         ],
         apply: function(baseUrl) {
             var resultUrl = baseUrl;
-
-            console.log('--- PRE-FILTERING: Start ---');
-            console.log('Original URL:', baseUrl);
-
             for (var i = 0; i < this.filters.length; i++) {
                 resultUrl = this.filters[i](resultUrl);
             }
-
-            console.log('Result URL:', resultUrl);
-            console.log('--- PRE-FILTERING: End ---');
-
             return resultUrl;
         }
     };
 
+    // =========================================================================
+    // II. ФИЛЬТРЫ РЕЗУЛЬТАТОВ (Post-Filters)
+    // Обрабатывают полученный массив данных (results) и применяют белый список.
+    // =========================================================================
     var postFilters = {
         filters: [
             function(results) {
                 // Регулярное выражение для русской кириллицы (А-Яа-яЁё) ИЛИ цифр (0-9)
                 var cyrillicOrNumberRegex = /[А-Яа-яЁё0-9]/; 
                 
-                var filteredResults = results.filter(function(item) {
+                return results.filter(function(item) {
                     if (!item) return true;
                     
-                    // 1. Проверка оригинального языка: RU
+                    // Условие 1: Оригинальный язык - Русский
                     var isRussian = (item.original_language && item.original_language.toLowerCase() === 'ru');
                     
-                    // 2. Проверка на кириллицу или цифры в названии
+                    // Условие 2: В названии есть кириллица или цифры
                     var hasCyrillicOrNumberInTitle = item.title && cyrillicOrNumberRegex.test(item.title);
                     
-                    // Условие белого списка: (Язык RU) ИЛИ (Название содержит кириллицу/цифры)
+                    // Белый список: Оставляем, если выполнено (Условие 1 ИЛИ Условие 2)
                     var keepItem = isRussian || hasCyrillicOrNumberInTitle;
-
-                    if (!keepItem) {
-                        // Логирование удаляемых элементов, которые не соответствуют белому списку
-                        console.log('FILTERED OUT (УДАЛЕНО):', item.title, '| Lang:', item.original_language);
-                    }
-                    // Если вам нужно увидеть все элементы (оставляемые и удаляемые), раскомментируйте эту строку:
-                    // else { console.log('KEPT (ОСТАВЛЕНО):', item.title, '| Lang:', item.original_language, '| Is RU:', isRussian, '| Has Cy/Num:', hasCyrillicOrNumberInTitle); }
 
                     return keepItem;
                 });
-                
-                return filteredResults;
             }
         ],
         apply: function(results) {
             var clone = Lampa.Arrays.clone(results);
-            var originalLength = results.length;
-            
-            console.log('--- POST-FILTERING: Start ---');
-            console.log('Original result count:', originalLength);
-
             for (var i = 0; i < this.filters.length; i++) {
                 clone = this.filters[i](results);
             }
-
-            console.log('Filtered result count:', clone.length);
-            console.log('--- POST-FILTERING: End ---');
-
             return clone;
         }
     };
 
+    // =========================================================================
+    // III. УТИЛИТЫ И ПРОВЕРКИ
+    // =========================================================================
+
+    // Проверяет, применим ли фильтр к данному URL.
+    // Использует '/3/' для совместимости с прокси.
     function isFilterApplicable(baseUrl) {
-        // FIX: Использование '/3/' вместо Lampa.TMDB.api('') для поддержки кастомных API-хостов.
-        var isApplicable = baseUrl.indexOf('/3/') > -1
+        return baseUrl.indexOf('/3/') > -1 // Проверка на префикс TMDB API
             && baseUrl.indexOf('/search') === -1
             && baseUrl.indexOf('/person/') === -1;
-            
-        console.log('isFilterApplicable check for URL:', baseUrl, '-> Result:', isApplicable);
-
-        return isApplicable;
     }
 
+    // Проверяет, имеет ли категория больше одной страницы результатов
+    // (для отображения кнопки "Ещё").
     function hasMorePage(data) {
         return !!data
             && Array.isArray(data.results)
@@ -104,15 +91,18 @@
             && data.total_pages > 1;
     }
     
+    // =========================================================================
+    // IV. ОСНОВНАЯ ЛОГИКА ПЛАГИНА (start)
+    // =========================================================================
+
     function start() {
         if (window.trash_filter_plugin) {
             return;
         }
-        
-        console.log('>>> TRASH FILTER PLUGIN STARTED <<<');
 
         window.trash_filter_plugin = true;
 
+        // 1. Обработка видимости линии: Добавляет кнопку "Ещё"
         Lampa.Listener.follow('line', function (event) {
             if (event.type !== 'visible' || !hasMorePage(event.data)) {
                 return;
@@ -143,6 +133,7 @@
             lineHeader$.append(button);
         });
         
+        // 2. Обработка добавления элементов: Управляет навигацией (для кнопки "Ещё")
         Lampa.Listener.follow('line', function (event) {
             if (event.type !== 'append' || !hasMorePage(event.data)) {
                 return;
@@ -153,30 +144,23 @@
             }
         });
 
-        Lampa.Listener.follow('request_secuses', function (event) {
-            console.log('>>> request_secuses triggered <<<');
-            console.log('Request URL:', event.params.url);
-            
-            if (isFilterApplicable(event.params.url) && event.data && Array.isArray(event.data.results)) {
-                
-                console.log('--- Post-filter is APPLICABLE, applying filter ---');
-                
-                event.data.original_length = event.data.results.length;
-                event.data.results = postFilters.apply(event.data.results);
-                
-                console.log('--- Post-filter applied successfully ---');
-            } else {
-                console.log('--- Post-filter SKIPPED (not applicable or no results) ---');
-            }
-        });
-
+        // 3. Перехват запроса перед отправкой: Применяет Pre-Filters
         Lampa.Listener.follow('before_send', function (event) {
             if (isFilterApplicable(event.url)) {
                 event.url = preFilters.apply(event.url);
             }
         });
+
+        // 4. Перехват успешного ответа: Применяет Post-Filters
+        Lampa.Listener.follow('request_secuses', function (event) {
+            if (isFilterApplicable(event.params.url) && event.data && Array.isArray(event.data.results)) {
+                event.data.original_length = event.data.results.length;
+                event.data.results = postFilters.apply(event.data.results);
+            }
+        });
     }
 
+    // Запуск плагина после готовности Lampa
     if (window.appready) {
         start();
     } else {

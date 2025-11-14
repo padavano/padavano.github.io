@@ -32,7 +32,7 @@
     var postFilters = {
         filters: [
             function(results) {
-                // Регулярное выражение для кириллицы (А-Яа-яЁё) ИЛИ цифр (0-9)
+                // Регулярное выражение для русской кириллицы (А-Яа-яЁё) ИЛИ цифр (0-9)
                 var cyrillicOrNumberRegex = /[А-Яа-яЁё0-9]/; 
 
                 return results.filter(function(item) {
@@ -40,25 +40,20 @@
                         return true; // Оставляем пустые элементы
                     }
 
-                    // Проверка на кириллицу или цифры в названии
+                    // 1. Проверка оригинального языка: RU
+                    var isRussian = (item.original_language && item.original_language.toLowerCase() === 'ru');
+                    
+                    // 2. Проверка на кириллицу или цифры в названии
                     var hasCyrillicOrNumberInTitle = item.title && cyrillicOrNumberRegex.test(item.title);
                     
-                    // 1. Проверка оригинального языка
-                    if (item.original_language) {
-                        var lang = item.original_language.toLowerCase();
-                        if (lang == 'ru') {
-                            return true; // Оставляем, если язык RU
-                        }
-                    }
-                    
-                    // 2. Добавленная проверка на кириллицу или цифры
-                    // Элемент остается, если в его названии есть кириллица или хотя бы одна цифра.
-                    if (hasCyrillicOrNumberInTitle) {
+                    // Элемент остается, если выполнено условие: 
+                    // (Оригинальный язык RU) ИЛИ (В названии есть кириллица или цифры)
+                    if (isRussian || hasCyrillicOrNumberInTitle) {
                         return true; 
                     }
 
-                    // 3. Стандартная проверка по vote_count для остальных элементов (напр., с латинскими названиями)
-                    return item.vote_count >= 30;
+                    // Все остальные элементы (не RU и без кириллицы/цифр в названии) удаляются.
+                    return false;
                 });
             }
         ],
@@ -66,7 +61,9 @@
             var clone = Lampa.Arrays.clone(results);
 
             for (var i = 0; i < this.filters.length; i++) {
-                clone = this.filters[i](results);
+                // В оригинальном коде использовался 'results' вместо 'clone' 
+                // во второй части цикла, сохраняя исходное поведение.
+                clone = this.filters[i](results); 
             }
 
             return clone;

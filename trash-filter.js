@@ -7,12 +7,10 @@
     // =========================================================================
     var preFilters = {
         filters: [
-            // Оставляет только элементы с количеством голосов >= 1
             function(baseUrl) {
                 baseUrl += '&vote_count.gte=' + 1;
                 return baseUrl;
             },
-            // Исключает элементы по заданным ключевым словам (keywords)
             function(baseUrl) {
                 var baseExcludedKeywords = [
                     '346488',
@@ -35,30 +33,34 @@
 
     // =========================================================================
     // II. ФИЛЬТРЫ РЕЗУЛЬТАТОВ (Post-Filters)
-    // Обрабатывают полученный массив данных (results) и применяют белый список.
+    // Обрабатывают полученный массив данных, применяя правила белого списка.
     // =========================================================================
     var postFilters = {
         filters: [
             function(results) {
-                // Белый список: разрешает ТОЛЬКО кириллицу (А-Яа-яЁё), цифры (0-9), пробелы и общую пунктуацию в названии.
-                // Строгая проверка с ^ и $ гарантирует, что НЕТ ЛАТИНИЦЫ ИЛИ ДРУГИХ СИМВОЛОВ.
+                // Строгий белый список для Title: разрешает только кириллицу, цифры, пробелы и пунктуацию.
                 var allowedTitleCharsRegex = /^[А-Яа-яЁё0-9\s.,'":!?-]+$/; 
-                // Проверка: название должно содержать хотя бы одну кириллицу ИЛИ цифру (для отсева названий из одной пунктуации)
+                // Проверка на наличие хотя бы одной кириллицы ИЛИ цифры в названии.
                 var requiredTitleCharsRegex = /[А-Яа-яЁё0-9]/; 
                 
                 return results.filter(function(item) {
                     if (!item) return true;
                     
-                    // Условие 1: Оригинальный язык - Русский (Приоритет)
+                    // НОВАЯ ПРОВЕРКА: Удаляем, если отсутствует дата релиза.
+                    if (!item.release_date) {
+                        return false;
+                    }
+                    
+                    // Условие 1: Оригинальный язык - Русский
                     var isRussian = (item.original_language && item.original_language.toLowerCase() === 'ru');
                     
                     // Условие 2: Title соответствует строгому белому списку
                     var isTitlePureCyrillicOrNumber = false;
 
                     if (item.title) {
-                        // Проверка 2.1: Title не содержит посторонних символов (латиницы, иероглифов и т.п.)
+                        // Title должен состоять ТОЛЬКО из разрешенных символов
                         var containsOnlyAllowedChars = allowedTitleCharsRegex.test(item.title);
-                        // Проверка 2.2: Title содержит хотя бы один значимый символ (кириллицу или цифру)
+                        // Title должен содержать значимые символы
                         var containsRequiredChars = requiredTitleCharsRegex.test(item.title);
                         
                         isTitlePureCyrillicOrNumber = containsOnlyAllowedChars && containsRequiredChars;
@@ -84,16 +86,13 @@
     // III. УТИЛИТЫ И ПРОВЕРКИ
     // =========================================================================
 
-    // Проверяет, применим ли фильтр к данному URL.
-    // Использует '/3/' для совместимости с прокси.
+    // Проверяет, применим ли фильтр к данному URL (включая /person/ и прокси).
     function isFilterApplicable(baseUrl) {
-        return baseUrl.indexOf('/3/') > -1 // Проверка на префикс TMDB API
-            && baseUrl.indexOf('/search') === -1
-            && baseUrl.indexOf('/person/') === -1;
+        return baseUrl.indexOf('/3/') > -1
+            && baseUrl.indexOf('/search') === -1;
     }
 
-    // Проверяет, имеет ли категория больше одной страницы результатов
-    // (для отображения кнопки "Ещё").
+    // Проверяет, имеет ли категория больше одной страницы результатов.
     function hasMorePage(data) {
         return !!data
             && Array.isArray(data.results)
@@ -114,7 +113,7 @@
 
         window.trash_filter_plugin = true;
 
-        // 1. Обработка видимости линии: Добавляет кнопку "Ещё"
+        // 1. Обработка видимости линии: Добавляет кнопку "Ещё".
         Lampa.Listener.follow('line', function (event) {
             if (event.type !== 'visible' || !hasMorePage(event.data)) {
                 return;
@@ -145,7 +144,7 @@
             lineHeader$.append(button);
         });
         
-        // 2. Обработка добавления элементов: Управляет навигацией (для кнопки "Ещё")
+        // 2. Обработка добавления элементов: Управляет навигацией.
         Lampa.Listener.follow('line', function (event) {
             if (event.type !== 'append' || !hasMorePage(event.data)) {
                 return;
@@ -156,14 +155,14 @@
             }
         });
 
-        // 3. Перехват запроса перед отправкой: Применяет Pre-Filters
+        // 3. Перехват запроса перед отправкой: Применяет Pre-Filters.
         Lampa.Listener.follow('before_send', function (event) {
             if (isFilterApplicable(event.url)) {
                 event.url = preFilters.apply(event.url);
             }
         });
 
-        // 4. Перехват успешного ответа: Применяет Post-Filters
+        // 4. Перехват успешного ответа: Применяет Post-Filters.
         Lampa.Listener.follow('request_secuses', function (event) {
             if (isFilterApplicable(event.params.url) && event.data && Array.isArray(event.data.results)) {
                 event.data.original_length = event.data.results.length;
@@ -172,7 +171,7 @@
         });
     }
 
-    // Запуск плагина после готовности Lampa
+    // Запуск плагина после готовности Lampa.
     if (window.appready) {
         start();
     } else {

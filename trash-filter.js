@@ -3,7 +3,6 @@
 
     // =========================================================================
     // I. ОБЪЯВЛЕНИЕ ПЕРЕМЕННЫХ И REGEX (Оптимизация)
-    // Объявляем Regex один раз для увеличения производительности.
     // =========================================================================
 
     // Строгий белый список для Title: разрешает только кириллицу, цифры, пробелы и пунктуацию.
@@ -49,8 +48,8 @@
                 return results.filter(function(item) {
                     if (!item) return true;
                     
-                    // 1. Проверка на наличие даты релиза.
-                    if (!item.release_date) {
+                    // 1. Проверка на наличие даты релиза (movie: release_date, tv: first_air_date).
+                    if (!item.release_date && !item.first_air_date) {
                         return false;
                     }
                     
@@ -77,10 +76,8 @@
             }
         ],
         apply: function(results) {
-            // Удалено Lampa.Arrays.clone() для оптимизации
             var filteredResults = results;
             for (var i = 0; i < this.filters.length; i++) {
-                // Применяем фильтр к результату предыдущего фильтра
                 filteredResults = this.filters[i](filteredResults);
             }
             return filteredResults;
@@ -149,7 +146,7 @@
             lineHeader$.append(button);
         });
         
-        // 2. Управляет навигацией (для кнопки "Ещё").
+        // 2. Управляет навигацией.
         Lampa.Listener.follow('line', function (event) {
             if (event.type !== 'append' || !hasMorePage(event.data)) {
                 return;

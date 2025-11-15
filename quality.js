@@ -1389,6 +1389,17 @@
             release_date: cardData.release_date || cardData.first_air_date || ''
         };
         var cardId = normalizedCard.id;
+
+        // --- НАЧАЛО ИСПРАВЛЕНИЯ ---
+        if (!normalizedCard.release_date) {
+            if (LQE_CONFIG.LOGGING_CARDLIST) console.log("LQE-CARDLIST", "card: " + cardId + ", No release date found. Skipping JacRed search and setting N/A.");
+            // Вызываем updateCardListQualityElement с 'forceVisible: true' (третий аргумент), 
+            // чтобы "N/A" отобразилось, а не было скрыто.
+            updateCardListQualityElement(cardView, LQE_QUALITY_NO_INFO_CODE, LQE_QUALITY_NO_INFO_LABEL, true, false);
+            return;
+        }
+        // --- КОНЕЦ ИСПРАВЛЕНИЯ ---
+
         var cacheKey = LQE_CONFIG.CACHE_VERSION + '_' + (isTvSeries ? 'tv_' : 'movie_') + normalizedCard.id;
 
         var cachedQualityData = getQualityCache(cacheKey);

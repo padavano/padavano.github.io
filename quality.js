@@ -1,11 +1,11 @@
-// Версия 1.02
+// Версия 1.03
 // Ссылка на плагин: https://padavano.github.io/quality.js
-// [ИЗМЕНЕНИЯ v1.02]
-// 1. Полностью убрана логика 'fallback' на cardData.quality (удалена extractInlineQuality).
-// 2. Убрана логика суффикса '-' (параметр 'source' удален из update...Element).
-// 3. Добавлена проверка на пустую дату релиза в full card (сразу N/A).
-// 4. Добавлена нормализация 'ё'->'е' и 'щ'->'ш' в lqeCleanTitleForComparison.
-// 5. Обновлен 'searchJacredApi' для приоритетного использования 'originalname' и 'name' из Jacred.
+// [ИЗМЕНЕНИЯ v1.03]
+// 1. Изменен приоритет определения качества: сначала используется свойство 'quality', 
+//    а 'title' парсится только как резервный вариант (в calculateTorrentScore).
+// 2. Добавлена логика обработки 1440p (2K) и 360p (SD) в calculateTorrentScore.
+// 3. Расширен диапазон 'SD' в translateQualityLabel для включения 360p.
+// 4. Удалены промежуточные "рабочие" комментарии, оставлены только заголовки блоков.
 
 (function() {
     'use strict';
@@ -18,7 +18,7 @@
         CACHE_VALID_TIME_MS: 3 * 24 * 60 * 60 * 1000, // 3 дня
         CACHE_REFRESH_THRESHOLD_MS: 12 * 60 * 60 * 1000, // 12 часов для фонового обновления
         CACHE_KEY: 'lampa_quality_cache', // Имя файла кэша в Lampa.Storage
-        JACRED_PROTOCOL: 'https://', // [ОПТИМИЗАЦИЯ] Изменено на https для прямых запросов
+        JACRED_PROTOCOL: 'https://',
         JACRED_URL: 'jacred.xyz',
         JACRED_API_KEY: '',
         PROXY_LIST: [
@@ -47,7 +47,6 @@
 
     var currentGlobalMovieId = null;
     
-    // [НОВОЕ] Константы для обработки "Качество не найдено"
     var LQE_QUALITY_NO_INFO_CODE = 'NO_INFO';
     var LQE_QUALITY_NO_INFO_LABEL = 'N/A';
 
@@ -319,7 +318,6 @@
             if (!card || !card.isConnected) return;
             if (!isFallbackMode && observer && !isElementNearViewport(card, FALLBACK_MARGIN)) return;
             
-            // [ИНТЕГРАЦИЯ] Вызываем нашу функцию обработки
             updateCardListQuality(card);
         }
 
@@ -346,8 +344,7 @@
     // --- Логика плагина ---
 
     /**
-     * [ОБНОВЛЕНО] Карта для перевода специфических торрент-лейблов в упрощенные категории.
-     * Эту карту можно дополнять для фиксации сложных, но качественных релизов.
+     * Карта для перевода специфических торрент-лейблов в упрощенные категории.
      */
     var QUALITY_DISPLAY_MAP = {
         //Группа самого высогого качества - 4K
@@ -429,7 +426,7 @@
     };
 
     /**
-     * [ИЗМЕНЕНО] Список низкокачественных ключевых слов, которые имеют приоритет.
+     * Список низкокачественных ключевых слов, которые имеют приоритет.
      */
     var LQE_LOW_QUALITY_KEYWORDS = [
         'telesync', 'telecine', 'camrip', 'экранка',
@@ -443,7 +440,7 @@
         'source',
     ];
 
-    // СТИЛИ: Удалена "visibility: hidden;" из .full-start-new__rate-line
+    // СТИЛИ
     var styleLQE = "<style id=\"lampa_quality_styles\">" +
     ".full-start-new__rate-line {" +
     "flex-wrap: wrap;" +
@@ -564,7 +561,6 @@
     Lampa.Template.add('lampa_quality_loading_animation_css', loadingStylesLQE);
     $('body').append(Lampa.Template.get('lampa_quality_loading_animation_css', {}, true));
 
-    // [ОПТИМИЗАЦИЯ] Cетевая стратегия "Сначала прямой, потом прокси"
     function fetchWithProxy(url, cardId, callback) {
         var currentProxyIndex = -1; // Начинаем с -1 для прямого запроса
         var callbackCalled = false;
@@ -652,6 +648,8 @@
         });
     }
 
+
+
     function removeLoadingAnimation(cardId, renderElement) {
         if (!renderElement) return;
         if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "card: " + cardId + ", Remove loading animation");
@@ -665,12 +663,7 @@
     }
 
     /**
-     * [УДАЛЕНО v1.02] Функция extractInlineQuality(cardData) удалена.
-     * Логика fallback на cardData.quality больше не используется.
-     */
-
-    /**
-     * [ОБНОВЛЕНО] Функция для перевода качества, теперь использует новую логику категоризации.
+     * Функция для перевода качества, теперь использует новую логику категоризации.
      * Приоритет: TS > SD > Разрешение
      */
     function translateQualityLabel(qualityCode, fullTorrentTitle) {
@@ -679,7 +672,7 @@
         const lowerFullTorrentTitle = (fullTorrentTitle || '').toLowerCase();
         let finalDisplayLabel = '';
         
-        // [НОВОЕ] Шаг 0: Проверка на NO_INFO
+        // Шаг 0: Проверка на NO_INFO
         if (qualityCode === LQE_QUALITY_NO_INFO_CODE) {
             if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "translateQualityLabel: NO_INFO code received. Displaying N/A.");
             return LQE_QUALITY_NO_INFO_LABEL;
@@ -689,7 +682,6 @@
         // Ищем любое из 'плохих' ключевых слов в полном заголовке торрента.
         const isLowQuality = LQE_LOW_QUALITY_KEYWORDS.some(function(keyword) {
             if (lowerFullTorrentTitle.includes(keyword)) {
-                // [ИСПРАВЛЕНО] Логирование переведено на совместимый синтаксис
                 if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "translateQualityLabel: Found low quality keyword: \"" + keyword + "\". Triggering TS category.");
                 return true;
             }
@@ -698,7 +690,6 @@
 
         if (isLowQuality) {
             finalDisplayLabel = 'TS';
-            // Старый лог убран, так как он менее информативен, чем лог внутри .some()
             return finalDisplayLabel;
         }
 
@@ -743,7 +734,7 @@
             finalDisplayLabel = '1080';
         } else if (numericQuality >= 720) {
             finalDisplayLabel = '720';
-        } else if (numericQuality >= 480) {
+        } else if (numericQuality >= 360) { // ИЗМЕНЕНО: 480 -> 360
             finalDisplayLabel = 'SD';
         } else {
             // Если не удалось определить ничего, и JacRed не дал качество, помечаем как неизвестное
@@ -775,41 +766,32 @@
     }
 
     /**
-     * [ИЗМЕНЕНИЕ v1.13] Ищет год в скобках, слэшах, точках или пробелах.
      * @param {string} title 
      * @returns {number}
      */
     function extractYearFromTitle(title) {
         if (!title) return 0;
         // Ищем год (19xx или 20xx) в круглых (), квадратных [], слэшах / / или точках . .
-        // Это более надежно отлавливает / 2012 / и (2012)
         const match = title.match(/[\(\[\/\.\s]((19|20)\d{2})[\)\]\/\.\s]/);
         return match ? parseInt(match[1], 10) : 0;
     }
     
     /**
      * Helper function to clean titles for robust comparison (removes punctuation, etc.)
-     * [ИЗМЕНЕНО v1.02] Добавлена нормализация 'ё'->'е' и 'щ'->'ш'.
      * @param {string} title 
      * @returns {string}
      */
     function lqeCleanTitleForComparison(title) {
         if (!title) return '';
-        // 1. Lowercase
         var cleaned = title.toLowerCase();
-        // 2. [НОВОЕ v1.02] Нормализация букв
         cleaned = cleaned.replace(/щ/g, 'ш');
         cleaned = cleaned.replace(/ё/g, 'е');
-        // 3. Remove common special characters and extra spaces
-        cleaned = cleaned.replace(/[^a-zа-я0-9\s]/g, ' '); // [ИЗМЕНЕНО v1.02] Убрана 'ё' из-за нормализации
-        // 4. Normalize multiple spaces to single space and trim
+        cleaned = cleaned.replace(/[^a-zа-я0-9\s]/g, ' ');
         cleaned = cleaned.replace(/\s+/g, ' ').trim();
         return cleaned;
     }
 
     /**
-     * [ИЗМЕНЕНИЕ v1.12] Добавлен isTvSeries и КРИТИЧЕСКИЙ ШТРАФ за год
-     * [ИЗМЕНЕНИЕ v1.09] `torrentYear` теперь может быть `relased`, `released`, `year`
      * @param {string} torrentTitle 
      * @param {string} torrentQuality 
      * @param {string|number} torrentYear (Год из JacRed (relased, released, year), если есть)
@@ -820,17 +802,20 @@
      */
     function calculateTorrentScore(torrentTitle, torrentQuality, torrentYear, searchYearNum, cardId, isTvSeries) {
         let score = 0;
-        let numericQuality = extractNumericQualityFromTitle(torrentTitle) || parseInt(torrentQuality, 10) || 0;
+        
+        // ИЗМЕНЕНИЕ: Приоритет 'quality' над парсингом 'title'
+        let numericQuality = parseInt(torrentQuality, 10) || extractNumericQualityFromTitle(torrentTitle) || 0;
 
         // 1. Оценка за качество (основной вес)
+        // ИЗМЕНЕНО: Добавлены 1440p и 360p
         if (numericQuality >= 2160) score += 10000;
+        else if (numericQuality >= 1440) score += 7500;
         else if (numericQuality >= 1080) score += 5000;
         else if (numericQuality >= 720) score += 2000;
-        else if (numericQuality >= 480) score += 500;
+        else if (numericQuality >= 360) score += 500;
         
-        // 2. Оценка за соответствие году (НОВАЯ ЛОГИКА v1.12 / ИСПРАВЛЕНИЕ v1.13)
+        // 2. Оценка за соответствие году
         if (searchYearNum) {
-            // [ИЗМЕНЕНИЕ v1.09] Сначала берем год из JacRed (relased/released/year), если он есть. Если нет, пытаемся извлечь из заголовка.
             let parsedYear = parseInt(torrentYear, 10) || extractYearFromTitle(torrentTitle);
             
             if (parsedYear > 0) { // Только если год удалось определить
@@ -879,7 +864,6 @@
         var dateStr = normalizedCard.release_date || normalizedCard.first_air_date;
         var isTvSeries = normalizedCard.type === 'tv' || normalizedCard.name;
         
-        // [ИСПРАВЛЕНИЕ V1.06] Для сериалов используем год только если это не текущий год
         if (isTvSeries && dateStr) {
             var currentYear = new Date().getFullYear().toString();
             if (dateStr.substring(0, 4) === currentYear) {
@@ -888,22 +872,16 @@
             }
         }
         
-        // [ИЗМЕНЕНИЕ v1.10] Переименовано в `tmdbYear`
         var tmdbYear = '';
         if (dateStr.length >= 4) {
             tmdbYear = dateStr.substring(0, 4);
         }
         if (!tmdbYear || isNaN(tmdbYear)) {
             if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "card: " + cardId + ", JacRed: Missing/invalid year for normalizedCard:", normalizedCard);
-            // Для ТВ сериалов без года это может быть допустимо, для фильмов - нет, но мы продолжим, чтобы дать шанс резерву.
         }
 
-        /**
-         * [ИЗМЕНЕНИЕ v1.10] Добавлен `tmdbSearchYear` для передачи года из TMDB
-         */
         function searchJacredApi(searchTitle, searchYear, exactMatch, strategyName, expectedLocalTitle, expectedOriginalTitle, tmdbSearchYear, isTvSeries, apiCallback) {
             var userId = Lampa.Storage.get('lampac_unic_id', '');
-            // NOTE: encodeURIComponent(searchTitle) будет кодировать строку.
             var apiUrl = LQE_CONFIG.JACRED_PROTOCOL + LQE_CONFIG.JACRED_URL + '/api/v1.0/torrents?search=' + encodeURIComponent(searchTitle) + (searchYear ? '&year=' + searchYear : '') + (exactMatch ? '&exact=true' : '') + '&uid=' + userId;
             
             if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "card: " + cardId + ", JacRed: " + strategyName + " URL: " + apiUrl);
@@ -930,14 +908,9 @@
 
                     var bestNumericQuality = -1;
                     var bestFoundTorrent = null;
-                    
-                    // [ИЗМЕНЕНИЕ v1.10] Это БАГ. `searchYear` - это год *стратегии*. Нам нужен `tmdbSearchYear`.
-                    // var searchYearNum = parseInt(searchYear, 10); // <-- БАГ
-                    var searchYearNum = parseInt(tmdbSearchYear, 10); // <-- ИСПРАВЛЕНИЕ
-                    
+                    var searchYearNum = parseInt(tmdbSearchYear, 10);
                     var bestScore = -Infinity;
 
-                    // [НОВОЕ] Подготовка названий для фильтрации
                     var cleanedLocalTitle = lqeCleanTitleForComparison(expectedLocalTitle);
                     var cleanedOriginalTitle = lqeCleanTitleForComparison(expectedOriginalTitle);
 
@@ -945,44 +918,39 @@
                         var currentTorrent = torrents[i];
                         var currentNumericQuality = parseInt(currentTorrent.quality, 10) || 0;
                         
-                        // [ИЗМЕНЕНО v1.02] Используем три источника для названий
-                        var cleanedTorrentTitleFallback = lqeCleanTitleForComparison(currentTorrent.title); // Для тех. ключевых слов и fallback
-                        var cleanedTorrentOriginal = lqeCleanTitleForComparison(currentTorrent.originalname); // Для точного сопоставления
-                        var cleanedTorrentLocal = lqeCleanTitleForComparison(currentTorrent.name); // Для точного сопоставления
+                        var cleanedTorrentTitleFallback = lqeCleanTitleForComparison(currentTorrent.title);
+                        var cleanedTorrentOriginal = lqeCleanTitleForComparison(currentTorrent.originalname);
+                        var cleanedTorrentLocal = lqeCleanTitleForComparison(currentTorrent.name);
 
-
-                        // [ИЗМЕНЕНО v1.02] Бонус за соответствие названиям (фильтрация)
                         var titleMatchBonus = 0;
-                        var originalTitleMatched = false; // [NEW VAR v1.09]
-                        var localTitleMatched = false; // [NEW VAR v1.09]
+                        var originalTitleMatched = false;
+                        var localTitleMatched = false;
                         
-                        // 1. Бонус за Оригинальное название (используется для поиска)
+                        // 1. Бонус за Оригинальное название
                         if (cleanedOriginalTitle.length > 0) {
                             if (cleanedTorrentOriginal.length > 0 && cleanedTorrentOriginal.includes(cleanedOriginalTitle)) {
-                                titleMatchBonus += 20000; // Приоритет
+                                titleMatchBonus += 20000;
                                 originalTitleMatched = true;
                             } else if (cleanedTorrentTitleFallback.includes(cleanedOriginalTitle)) {
-                                titleMatchBonus += 15000; // Fallback
+                                titleMatchBonus += 15000;
                                 originalTitleMatched = true;
                             }
                         }
 
-                        // 2. Бонус за Локализованное название (если отличается)
+                        // 2. Бонус за Локализованное название
                         if (cleanedLocalTitle.length > 0 && cleanedLocalTitle !== cleanedOriginalTitle) {
                             if (cleanedTorrentLocal.length > 0 && cleanedTorrentLocal.includes(cleanedLocalTitle)) {
-                                titleMatchBonus += 10000; // Приоритет
+                                titleMatchBonus += 10000;
                                 localTitleMatched = true;
                             } else if (cleanedTorrentTitleFallback.includes(cleanedLocalTitle)) {
-                                titleMatchBonus += 7500; // Fallback
+                                titleMatchBonus += 7500;
                                 localTitleMatched = true;
                             }
                         } else if (cleanedLocalTitle.length > 0 && cleanedLocalTitle === cleanedOriginalTitle) {
-                             // Если названия одинаковые, совпадение с оригиналом = совпадение с локальным
                             localTitleMatched = originalTitleMatched;
                         }
 
-
-                        // [ОПТИМИЗАЦИЯ v1.06: Остановка на нахождении 4K/2160p]
+                        // Остановка на нахождении 4K/2160p
                         if (typeof currentNumericQuality !== 'number' || currentNumericQuality === 0) {
                             var extractedQuality = extractNumericQualityFromTitle(currentTorrent.title);
                             if (extractedQuality > 0) {
@@ -990,21 +958,16 @@
                             }
                         }
                         
-                        // [ИЗМЕНЕНИЕ v1.12] Проверка года для Оптимизации 4K
                         var isYearValidForOptim = false;
                         if (!isTvSeries && searchYearNum) {
-                            // [ИЗМЕНЕНИЕ v1.09] Используем `relased` или `released` для проверки года
                             var parsedYearForOptim = parseInt(currentTorrent.relased || currentTorrent.released || currentTorrent.year, 10) || extractYearFromTitle(currentTorrent.title);
                             if (parsedYearForOptim > 0 && Math.abs(parsedYearForOptim - searchYearNum) <= 1) {
                                 isYearValidForOptim = true;
                             }
                         } else {
-                            // Для сериалов или если год не указан, считаем год валидным для оптимизации
                             isYearValidForOptim = true; 
                         }
 
-                        // [MODIFIED 4K OPTIMIZATION (Point 2d) v1.09]
-                        // User wants: 4K AND Year Match AND Original Title Match AND Local Title Match
                         if (currentNumericQuality >= 2160 && isYearValidForOptim && originalTitleMatched && localTitleMatched) {
                              var lowerTitle = currentTorrent.title.toLowerCase();
                              var isLowQuality = false;
@@ -1017,28 +980,20 @@
                              if (!isLowQuality) {
                                  bestNumericQuality = currentNumericQuality;
                                  bestFoundTorrent = currentTorrent;
-                                 bestScore = 1000000; // [FIX v1.09] Set a very high score
+                                 bestScore = 1000000;
                                  if (LQE_CONFIG.LOGGING_QUALITY) {
                                      console.log("LQE-QUALITY", "card: " + cardId + ", Optimization: Found 4K PERFECT MATCH. Stopping search.");
                                  }
-                                 break; // КЛЮЧЕВОЕ ДЕЙСТВИЕ: Прекращаем дальнейший поиск
+                                 break; // Прекращаем дальнейший поиск
                              }
                         }
-                        // [КОНЕЦ ОПТИМИЗАЦИИ]
 
                         if (typeof currentNumericQuality !== 'number' || currentNumericQuality === 0) {
                             continue;
                         }
                         
-                        // [ИЗМЕНЕНИЕ v1.12] Жесткий фильтр (continue) УДАЛЕН.
-                        // Логика перенесена в calculateTorrentScore с критическим штрафом.
-                        
-                        // [ИЗМЕНЕНИЕ v1.09] Передаем год из `relased` / `released` / `year`
                         var torrentYearFromObject = currentTorrent.relased || currentTorrent.released || currentTorrent.year;
                         
-                        // Расчет базового скора + добавление бонуса за соответствие названиям
-                        // [ИЗМЕНЕНИЕ v1.10] `searchYearNum` теперь ВСЕГДА год из TMDB
-                        // [ИЗМЕНЕНО v1.02] Передаем `currentTorrent.title` (НЕОЧИЩЕННЫЙ) для тех. анализа
                         var currentScore = calculateTorrentScore(currentTorrent.title, currentTorrent.quality, torrentYearFromObject, searchYearNum, cardId, isTvSeries);
                         currentScore += titleMatchBonus;
 
@@ -1051,12 +1006,11 @@
                         if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "card: " + cardId + ", JacRed: Strategy " + strategyName + ", Torrent: " + currentTorrent.title + ", Score: " + currentScore);
                     }
 
-                    // [ИЗМЕНЕНИЕ v1.09] Проверяем, что лучший балл >= 0
                     if (bestFoundTorrent && bestScore >= 0) {
                         if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "card: " + cardId + ", JacRed: Best positive score torrent found in " + strategyName + " with score " + bestScore + " and quality " + (bestFoundTorrent.quality || bestNumericQuality) + "p");
                         apiCallback({ quality: bestFoundTorrent.quality || bestNumericQuality, full_label: bestFoundTorrent.title });
                     } else {
-                        if (bestFoundTorrent) { // Лог, почему мы пропускаем
+                        if (bestFoundTorrent) {
                              if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "card: " + cardId + ", JacRed: Strategy " + strategyName + " found torrents, but all had negative scores (best was " + bestScore + "). Moving to next strategy.");
                         } else {
                              if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "card: " + cardId + ", JacRed: No suitable torrents found in " + strategyName + ".");
@@ -1095,10 +1049,7 @@
     }
 
     // --- Стратегия 3: Local Title + Year ---
-    // [ИЗМЕНЕНИЕ v1.11] Убрано `!originalTitleExists`. 
-    // Эта стратегия *всегда* должна добавляться, если есть LocalTitle.
     if (titleExists && tmdbYear) {
-        // [ОПТИМИЗАЦИЯ v1.11] Не добавляем, если LocalTitle == OriginalTitle (уже искали)
         if (!originalTitleExists || normalizedCard.title.trim() !== normalizedCard.original_title.trim()) {
             searchStrategies.push({
                 title: normalizedCard.title.trim(),
@@ -1110,9 +1061,7 @@
     }
     
     // --- Стратегия 4: Local Title (no year) ---
-    // [ИЗМЕНЕНИЕ v1.11] Убрано `!originalTitleExists`.
     if (titleExists) {
-         // [ОПТИМИЗАЦИЯ v1.11] Не добавляем, если LocalTitle == OriginalTitle (уже искали)
         if (!originalTitleExists || normalizedCard.title.trim() !== normalizedCard.original_title.trim()) {
             searchStrategies.push({
                 title: normalizedCard.title.trim(),
@@ -1124,7 +1073,7 @@
     }
 
 
-    function executeNextStrategy(index, tmdbSearchYear) { // [ИЗМЕНЕНИЕ v1.10] Добавлен tmdbSearchYear
+    function executeNextStrategy(index, tmdbSearchYear) {
         if (index >= searchStrategies.length) {
             if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "card: " + cardId + ", JacRed: All strategies failed. Returning null.");
             callback(null);
@@ -1143,28 +1092,27 @@
             strategy.name, 
             localTitleForFilter, 
             originalTitleForFilter,
-            tmdbSearchYear, // [ИЗМЕНЕНИЕ v1.10] Год из TMDB (для скоринга)
+            tmdbSearchYear, // Год из TMDB (для скоринга)
             isTvSeries, 
             function(result) {
                 if (result && (result.quality || result.full_label)) {
                     if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "card: " + cardId + ", JacRed: Successfully found quality using strategy " + strategy.name + ": " + result.quality + " (torrent: \"" + result.full_label + "\")");
                     callback(result);
                 } else {
-                    executeNextStrategy(index + 1, tmdbSearchYear); // [ИЗМЕНЕНИЕ v1.10] Передаем год дальше
+                    executeNextStrategy(index + 1, tmdbSearchYear);
                 }
             }
         );
     }
 
     if (searchStrategies.length > 0) {
-        executeNextStrategy(0, tmdbYear); // [ИЗМЕНЕНИЕ v1.10] Передаем tmdbYear
+        executeNextStrategy(0, tmdbYear);
     } else {
         if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "card: " + cardId + ", JacRed: No valid search titles or strategies defined.");
         callback(null);
     }
     }
 
-    // [ОПТИМИЗАЦИЯ] Функция getQualityCache переписана для работы с новым кэшем
     function getQualityCache(key) {
         var store = getLqePersistentCacheStore();
         var item = store.get(key); // .get() уже проверяет TTL
@@ -1174,11 +1122,9 @@
         return item; // Возвращает null, если не найдено или истек срок
     }
 
-    // [ОПТИМИЗАЦИЯ] Функция saveQualityCache переписана для работы с новым кэшем
     function saveQualityCache(key, data, cardId) {
         if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "Cache: Saving quality cache for key:", key, "Data:", data);
         var store = getLqePersistentCacheStore();
-        // Новый кэш сам добавляет timestamp
         store.set(key, { quality_code: data.quality_code, full_label: data.full_label });
     }
 
@@ -1201,14 +1147,12 @@
             var placeholder = document.createElement('div');
             placeholder.className = 'full-start__status lqe-quality';
             placeholder.textContent = LQE_QUALITY_NO_INFO_LABEL;
-            // Устанавливаем минимальную прозрачность, чтобы элемент присутствовал, но был почти невидимым
             placeholder.style.opacity = '0.01';
             rateLine.append(placeholder);
         }
     }
 
     /**
-     * [ИЗМЕНЕНО v1.02] Удален параметр 'source'.
      * @param {string} qualityCode 
      * @param {string} fullTorrentTitle 
      * @param {string} cardId 
@@ -1226,7 +1170,6 @@
         
         if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "card: " + cardId + ", Displaying quality: " + displayQuality);
         
-        // [ИСПРАВЛЕНИЕ] Всегда создаем и добавляем элемент, независимо от того, N/A это или реальное качество.
         var div = document.createElement('div');
         div.className = 'full-start__status lqe-quality';
         div.textContent = displayQuality;
@@ -1234,7 +1177,6 @@
     }
 
     /**
-     * [ИЗМЕНЕНО v1.02] Удален параметр 'source'.
      * @param {jQuery} cardView 
      * @param {string} qualityCode 
      * @param {string} fullTorrentTitle 
@@ -1253,7 +1195,6 @@
             var qualityDiv = document.createElement('div');
             qualityDiv.className = 'card__quality';
 
-            // [ИСПРАВЛЕНО v1.02] Скрываем только *синхронный* placeholder (когда forceVisible=false)
             if (qualityCode === LQE_QUALITY_NO_INFO_CODE && !forceVisible) {
                 qualityDiv.style.opacity = '0.01';
             }
@@ -1263,7 +1204,6 @@
             qualityDiv.appendChild(innerElement);
             cardView.appendChild(qualityDiv);
             
-            // Показываем, если это не синхронный placeholder
             if (forceVisible) {
                 qualityDiv.style.opacity = '1';
             }
@@ -1281,7 +1221,6 @@
         var normalizedCard = {
             id: cardData.id || '',
             title: cardData.title || cardData.name || '',
-            // [ИСПРАВЛЕНИЕ 1] Улучшена нормализация данных для большей надежности
             original_title: cardData.original_original_name || cardData.original_name || cardData.original_title || '',
             type: getCardType(cardData),
             release_date: cardData.release_date || cardData.first_air_date || ''
@@ -1296,7 +1235,6 @@
             if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "card: " + cardId + ", .full-start-new__rate-line not found, skipping loading animation.");
         }
         
-        // [НОВОЕ v1.02] Проверка на отсутствие даты релиза.
         if (!normalizedCard.release_date) {
             if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "card: " + cardId + ", No release date found. Skipping JacRed search and setting N/A.");
             removeLoadingAnimation(cardId, renderElement);
@@ -1315,19 +1253,16 @@
             if (cachedQualityData) {
                 if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "card: " + cardId + ", Quality data found in cache:", cachedQualityData);
                 
-                // [ИЗМЕНЕНО v1.02] Убран fallback на cardQuality.
                 if (cachedQualityData.quality_code === LQE_QUALITY_NO_INFO_CODE) {
-                    // JacRed вернул N/A из кэша.
                     if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "card: " + cardId + ", Cached data is NO_INFO. Displaying N/A.");
                     updateFullCardQualityElement(cachedQualityData.quality_code, cachedQualityData.full_label, cardId, renderElement);
                 } else {
-                    // Кэш валидный, используем его
                     updateFullCardQualityElement(cachedQualityData.quality_code, cachedQualityData.full_label, cardId, renderElement);
                 }
 
                 removeLoadingAnimation(cardId, renderElement);
 
-                // Запуск фонового обновления (логика остается прежней)
+                // Запуск фонового обновления
                 queueLqeRequest(function(done) {
                     getBestReleaseFromJacred(normalizedCard, cardId, function(jrResult) {
                         try {
@@ -1345,7 +1280,6 @@
                                 if (LQE_CONFIG.LOGGING_QUALITY) console.log('LQE-QUALITY', 'card: ' + cardId + ', JacRed result updated cache. Refreshing UI.');
                                 saveQualityCache(cacheKey, finalData, cardId);
                                 
-                                // [ИЗМЕНЕНО v1.02] Убран fallback на cardQuality.
                                 if (finalData.quality_code === LQE_QUALITY_NO_INFO_CODE) {
                                     updateFullCardQualityElement(finalData.quality_code, finalData.full_label, cardId, renderElement);
                                 } else {
@@ -1356,7 +1290,7 @@
                             if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "card: " + cardId + ", Background cache and UI refresh completed.");
                             done();
                         } catch(e) {
-                            console.error("LQE-LOG", "card: " + cardId + ", CRITICAL SYNC ERROR inside JacRed result processing (Full Card/Background):", e);
+                            console.error("LQE-LOG", "card: "Id + ", CRITICAL SYNC ERROR inside JacRed result processing (Full Card/Background):", e);
                             done();
                         }
                     });
@@ -1366,7 +1300,6 @@
                 clearFullCardQualityElements(cardId, renderElement);
                 showFullCardQualityPlaceholder(cardId, renderElement);
 
-                // [ОПТИМИЗАЦИЯ] Оборачиваем в очередь
                 queueLqeRequest(function(done) {
                     getBestReleaseFromJacred(normalizedCard, cardId, function(jrResult) {
                         try {
@@ -1382,17 +1315,14 @@
                             }
 
                             if (qualityCode && qualityCode !== 'NO') {
-                                // JacRed нашел
                                 if (LQE_CONFIG.LOGGING_QUALITY) console.log('LQE-QUALITY', 'card: ' + cardId + ', JacRed found quality code: ' + qualityCode + ', full label: ' + fullTorrentTitle);
                                 finalData = { quality_code: qualityCode, full_label: fullTorrentTitle };
                                 saveQualityCache(cacheKey, finalData, cardId);
                                 updateFullCardQualityElement(finalData.quality_code, finalData.full_label, cardId, currentRenderElement);
                             } else {
-                                // [ИЗМЕНЕНО v1.02] JacRed вернул N/A, fallback УБРАН.
                                 var jacredNAGrady = { quality_code: LQE_QUALITY_NO_INFO_CODE, full_label: LQE_QUALITY_NO_INFO_LABEL };
-                                saveQualityCache(cacheKey, jacredNAGrady, cardId); // Сохраняем N/A от JacRed
+                                saveQualityCache(cacheKey, jacredNAGrady, cardId);
 
-                                // Качества нет
                                 if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", 'card: ' + cardId + ', No quality from JacRed. Setting to N/A.');
                                 updateFullCardQualityElement(LQE_QUALITY_NO_INFO_CODE, LQE_QUALITY_NO_INFO_LABEL, cardId, currentRenderElement); 
                             }
@@ -1401,7 +1331,7 @@
                         } catch (e) {
                             console.error("LQE-LOG", "card: " + cardId + ", CRITICAL SYNC ERROR inside JacRed result processing (Full Card/Initial):", e);
                         } finally {
-                            done(); // ГАРАНТИЯ: Вызов done() при ошибке
+                            done();
                         }
                     });
                 });
@@ -1417,17 +1347,12 @@
         if (!card.hasAttribute('data-lqe-quality-processed')) {
             requestAnimationFrame(function() {
                 if (card.isConnected) {
-                    // 1. Вставляем синхронный заглушечный элемент сразу (N/A, opacity: 0.01)
                     var cardView = card.querySelector('.card__view');
                     if (cardView) {
-                        // [ИЗМЕНЕНО v1.02] source не передаем (undefined), forceVisible=false
                         updateCardListQualityElement(cardView, LQE_QUALITY_NO_INFO_CODE, LQE_QUALITY_NO_INFO_LABEL, false, false);
-                        
-                        // 2. Устанавливаем флаг "обработано", чтобы VisibilityManager не делал лишнюю работу
                         card.setAttribute('data-lqe-quality-processed', 'true');
                     }
                     
-                    // Передаем менеджеру видимости для асинхронной загрузки реального качества
                     lqeCardVisibilityManager.observe(card);
                 }
             });
@@ -1459,7 +1384,6 @@
         var normalizedCard = {
             id: cardData.id || '',
             title: cardData.title || cardData.name || '',
-            // [ИСПРАВЛЕНИЕ 1] Улучшена нормализация данных для мини-карты
             original_title: cardData.original_original_name || cardData.original_name || cardData.original_title || '',
             type: getCardType(cardData),
             release_date: cardData.release_date || cardData.first_air_date || ''
@@ -1472,8 +1396,6 @@
         if (cachedQualityData) {
             if (LQE_CONFIG.LOGGING_CARDLIST) console.log("LQE-CARDLIST", "card: " + cardId + ", Quality data found in cache:", cachedQualityData);
             
-            // FAST PATH: Отображаем кэшированное качество
-            // [ИЗМЕНЕНО v1.02] Убран fallback на cardQuality.
             if (cachedQualityData.quality_code === LQE_QUALITY_NO_INFO_CODE) {
                 if (LQE_CONFIG.LOGGING_CARDLIST) console.log("LQE-CARDLIST", "card: " + cardId + ", Cached NO_INFO. Displaying N/A.");
                 updateCardListQualityElement(cardView, cachedQualityData.quality_code, cachedQualityData.full_label, true, false);
@@ -1481,8 +1403,7 @@
                 updateCardListQualityElement(cardView, cachedQualityData.quality_code, cachedQualityData.full_label, true, false);
             }
 
-
-            // Запуск фонового обновления (логика та же)
+            // Запуск фонового обновления
             queueLqeRequest(function(done) {
                 getBestReleaseFromJacred(normalizedCard, cardId, function(jrResult) {
                     try {
@@ -1501,7 +1422,6 @@
                             saveQualityCache(cacheKey, finalData, cardId);
 
                             if (document.body.contains(cardElement)) {
-                                // [ИЗМЕНЕНО v1.02] Убран fallback на cardQuality.
                                 if (finalData.quality_code === LQE_QUALITY_NO_INFO_CODE) {
                                     updateCardListQualityElement(cardView, LQE_QUALITY_NO_INFO_CODE, LQE_QUALITY_NO_INFO_LABEL, true, true);
                                 } else {
@@ -1522,7 +1442,7 @@
             return;
         }
 
-        // SLOW PATH: Заглушка уже установлена, запускаем сетевой запрос.
+        // SLOW PATH
         queueLqeRequest(function(done) {
             getBestReleaseFromJacred(normalizedCard, cardId, function(jrResult) {
                 try {
@@ -1538,16 +1458,13 @@
                     var finalData = null;
 
                     if (qualityCode && qualityCode !== 'NO') {
-                        // JacRed нашел
                         finalData = { quality_code: qualityCode, full_label: fullTorrentTitle };
                         saveQualityCache(cacheKey, finalData, cardId);
                         updateCardListQualityElement(cardView, finalData.quality_code, finalData.full_label, true, false);
                     } else {
-                        // [ИЗМЕНЕНО v1.02] JacRed вернул N/A, fallback УБРАН.
                         var jacredNAGrady = { quality_code: LQE_QUALITY_NO_INFO_CODE, full_label: LQE_QUALITY_NO_INFO_LABEL };
-                        saveQualityCache(cacheKey, jacredNAGrady, cardId); // Сохраняем N/A от JacRed
+                        saveQualityCache(cacheKey, jacredNAGrady, cardId);
 
-                        // Качества нет
                         if (LQE_CONFIG.LOGGING_CARDLIST) console.log("LQE-CARDLIST", 'card: ' + cardId + ', No quality from JacRed. Setting to N/A.');
                         updateCardListQualityElement(cardView, LQE_QUALITY_NO_INFO_CODE, LQE_QUALITY_NO_INFO_LABEL, true, false);
                     }
@@ -1557,7 +1474,7 @@
                 } catch (e) {
                     console.error("LQE-LOG", "card: " + cardId + ", CRITICAL SYNC ERROR inside JacRed result processing (List Card/Initial):", e);
                 } finally {
-                    done(); // ГАРАНТИЯ: Вызов done() при ошибке
+                    done();
                 }
             });
         });
@@ -1566,7 +1483,6 @@
 
     // --- Инициализация и обработчики событий DOM ---
 
-    // [ОПТИМИЗАЦИЯ] Наблюдатель за DOM для автоматической обработки новых карточек
     var observer = new MutationObserver(function(mutations) {
         var newCards = [];
         for (var m = 0; m < mutations.length; m++) {
@@ -1590,19 +1506,13 @@
         if (newCards.length) {
             if (LQE_CONFIG.LOGGING_CARDLIST) console.log("LQE-CARDLIST", "Observer detected " + newCards.length + " new cards. Processing...");
             newCards.forEach(function(card) {
-                // Если элемент еще не был обработан (т.е. на нем нет заглушки)
                 if (!card.hasAttribute('data-lqe-quality-processed')) {
-                    // 1. Синхронная вставка заглушки
                     var cardView = card.querySelector('.card__view');
                     if (cardView) {
-                        // [ИЗМЕНЕНО v1.02] source не передаем (undefined), forceVisible=false
                         updateCardListQualityElement(cardView, LQE_QUALITY_NO_INFO_CODE, LQE_QUALITY_NO_INFO_LABEL, false, false);
-                        
-                        // 2. Устанавливаем флаг "обработано", чтобы VisibilityManager не делал лишнюю работу
                         card.setAttribute('data-lqe-quality-processed', 'true');
                     }
                     
-                    // Передаем менеджеру видимости для асинхронной загрузки реального качества
                     lqeCardVisibilityManager.observe(card);
                 }
             });
@@ -1610,7 +1520,7 @@
     });
 
     function initializeLampaQualityPlugin() {
-        if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "Lampa Quality Enhancer: Plugin Initialization Started! (v1.02)");
+        if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "Lampa Quality Enhancer: Plugin Initialization Started! (v1.03)");
         window.lampaQualityPlugin = true;
 
         observer.observe(document.body, {

@@ -168,10 +168,25 @@
         });
 
         // 4. Применяет Post-Filters.
+        // Теперь фильтрация применяется к массивам: results, cast И crew.
         Lampa.Listener.follow('request_secuses', function (event) {
-            if (isFilterApplicable(event.params.url) && event.data && Array.isArray(event.data.results)) {
-                event.data.original_length = event.data.results.length;
-                event.data.results = postFilters.apply(event.data.results);
+            if (isFilterApplicable(event.params.url) && event.data) {
+                
+                // Обработка стандартного массива 'results'
+                if (Array.isArray(event.data.results)) {
+                    event.data.original_length = event.data.results.length;
+                    event.data.results = postFilters.apply(event.data.results);
+                }
+                
+                // НОВОЕ: Обработка массива 'cast' (для combined_credits)
+                if (Array.isArray(event.data.cast)) {
+                    event.data.cast = postFilters.apply(event.data.cast);
+                }
+                
+                // НОВОЕ: Обработка массива 'crew' (для combined_credits)
+                if (Array.isArray(event.data.crew)) {
+                    event.data.crew = postFilters.apply(event.data.crew);
+                }
             }
         });
     }

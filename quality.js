@@ -1064,8 +1064,8 @@
         }
 
     var searchStrategies = [];
-    var titleExists = normalizedCard.title && (/[a-zа-яё]/i.test(normalizedCard.title) || /^\d+$/.test(normalizedCard.title));
-    var originalTitleExists = normalizedCard.original_title && (/[a-zа-яё]/i.test(normalizedCard.original_title) || /^\d+$/.test(normalizedCard.original_title));
+    var titleExists = normalizedCard.title && (/[a-zа-я]/i.test(normalizedCard.title) || /^\d+$/.test(normalizedCard.title)); // [ИЗМЕНЕНО v1.03] Убрана 'ё' из-за нормализации
+    var originalTitleExists = normalizedCard.original_title && (/[a-zа-я]/i.test(normalizedCard.original_title) || /^\d+$/.test(normalizedCard.original_title)); // [ИЗМЕНЕНО v1.03] Убрана 'ё' из-за нормализации
 
     // --- Стратегия 1: Original Title + Year ---
     if (originalTitleExists && tmdbYear) {
@@ -1289,7 +1289,7 @@
             if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "card: " + cardId + ", .full-start-new__rate-line not found, skipping loading animation.");
         }
         
-        // [НОВОЕ v1.02] Проверка на отсутствие даты релиза.
+        // [ИЗМЕНЕНО v1.03] Проверка на отсутствие даты релиза.
         if (!normalizedCard.release_date) {
             if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "card: " + cardId + ", No release date found. Skipping JacRed search and setting N/A.");
             removeLoadingAnimation(cardId, renderElement);
@@ -1458,6 +1458,15 @@
             release_date: cardData.release_date || cardData.first_air_date || ''
         };
         var cardId = normalizedCard.id;
+        
+        // [НОВОЕ v1.03] Проверка на отсутствие даты релиза для мини-карточек
+        if (!normalizedCard.release_date) {
+            if (LQE_CONFIG.LOGGING_CARDLIST) console.log("LQE-CARDLIST", "card: " + cardId + ", No release date found. Skipping JacRed search and setting N/A.");
+            // forceVisible = true, чтобы N/A отобразился поверх заглушки
+            updateCardListQualityElement(cardView, LQE_QUALITY_NO_INFO_CODE, LQE_QUALITY_NO_INFO_LABEL, true, false);
+            return;
+        }
+        
         var cacheKey = LQE_CONFIG.CACHE_VERSION + '_' + (isTvSeries ? 'tv_' : 'movie_') + normalizedCard.id;
 
         var cachedQualityData = getQualityCache(cacheKey);
@@ -1603,7 +1612,7 @@
     });
 
     function initializeLampaQualityPlugin() {
-        if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "Lampa Quality Enhancer: Plugin Initialization Started! (v1.02)");
+        if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "Lampa Quality Enhancer: Plugin Initialization Started! (v1.03)");
         window.lampaQualityPlugin = true;
 
         observer.observe(document.body, {

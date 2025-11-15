@@ -5,7 +5,6 @@
 //    а 'title' парсится только как резервный вариант (в calculateTorrentScore).
 // 2. Добавлена логика обработки 1440p (2K) и 360p (SD) в calculateTorrentScore.
 // 3. Расширен диапазон 'SD' в translateQualityLabel для включения 360p.
-// 4. Удалены промежуточные "рабочие" комментарии, оставлены только заголовки блоков.
 
 (function() {
     'use strict';
@@ -734,7 +733,7 @@
             finalDisplayLabel = '1080';
         } else if (numericQuality >= 720) {
             finalDisplayLabel = '720';
-        } else if (numericQuality >= 360) { // ИЗМЕНЕНО: 480 -> 360
+        } else if (numericQuality >= 360) {
             finalDisplayLabel = 'SD';
         } else {
             // Если не удалось определить ничего, и JacRed не дал качество, помечаем как неизвестное
@@ -803,11 +802,10 @@
     function calculateTorrentScore(torrentTitle, torrentQuality, torrentYear, searchYearNum, cardId, isTvSeries) {
         let score = 0;
         
-        // ИЗМЕНЕНИЕ: Приоритет 'quality' над парсингом 'title'
+        // Приоритет 'quality' над парсингом 'title'
         let numericQuality = parseInt(torrentQuality, 10) || extractNumericQualityFromTitle(torrentTitle) || 0;
 
         // 1. Оценка за качество (основной вес)
-        // ИЗМЕНЕНО: Добавлены 1440p и 360p
         if (numericQuality >= 2160) score += 10000;
         else if (numericQuality >= 1440) score += 7500;
         else if (numericQuality >= 1080) score += 5000;
@@ -1290,7 +1288,8 @@
                             if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "card: " + cardId + ", Background cache and UI refresh completed.");
                             done();
                         } catch(e) {
-                            console.error("LQE-LOG", "card: "Id + ", CRITICAL SYNC ERROR inside JacRed result processing (Full Card/Background):", e);
+                            // [ИСПРАВЛЕНО v1.04]
+                            console.error("LQE-LOG", "card: " + cardId + ", CRITICAL SYNC ERROR inside JacRed result processing (Full Card/Background):", e);
                             done();
                         }
                     });
@@ -1329,6 +1328,7 @@
                             removeLoadingAnimation(cardId, currentRenderElement);
 
                         } catch (e) {
+                            // [ИСПРАВЛЕНО v1.04]
                             console.error("LQE-LOG", "card: " + cardId + ", CRITICAL SYNC ERROR inside JacRed result processing (Full Card/Initial):", e);
                         } finally {
                             done();
@@ -1433,6 +1433,7 @@
                         
                         done();
                     } catch(e) {
+                        // [ИСПРАВЛЕНО v1.04]
                         console.error("LQE-LOG", "card: " + cardId + ", CRITICAL SYNC ERROR inside JacRed result processing (List Card/Background):", e);
                         done();
                     }
@@ -1472,6 +1473,7 @@
                     if (LQE_CONFIG.LOGGING_CARDLIST) console.log("LQE-CARDLIST", "card: " + cardId + ", UI update completed for list card.");
 
                 } catch (e) {
+                    // [ИСПРАВЛЕНО v1.04]
                     console.error("LQE-LOG", "card: " + cardId + ", CRITICAL SYNC ERROR inside JacRed result processing (List Card/Initial):", e);
                 } finally {
                     done();
@@ -1520,7 +1522,7 @@
     });
 
     function initializeLampaQualityPlugin() {
-        if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "Lampa Quality Enhancer: Plugin Initialization Started! (v1.03)");
+        if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "Lampa Quality Enhancer: Plugin Initialization Started! (v1.04)");
         window.lampaQualityPlugin = true;
 
         observer.observe(document.body, {

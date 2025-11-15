@@ -49,13 +49,7 @@
                 return results.filter(function(item) {
                     if (!item) return true;
                     
-                    // БЕЗОПАСНОСТЬ: Если объект является Актером (имеет поле known_for_department),
-                    // он немедленно пропускается, чтобы избежать удаления целых списков актеров.
-                    if (item.known_for_department) {
-                        return true;
-                    }
-
-                    // 1. Проверка на наличие даты релиза.
+                    // 1. Проверка на наличие даты релиза (movie: release_date, tv: first_air_date).
                     if (!item.release_date && !item.first_air_date) {
                         return false;
                     }
@@ -97,10 +91,10 @@
 
     // Проверяет, применим ли фильтр к данному URL.
     function isFilterApplicable(baseUrl) {
-        // Исключаем /search/ и /person/popular (по-прежнему, для двойной защиты)
+        // Исключаем /search/ и /person/popular, но разрешаем /person/{id}/combined_credits.
         return baseUrl.indexOf('/3/') > -1
             && baseUrl.indexOf('/search') === -1
-            && baseUrl.indexOf('/person/popular') === -1; 
+            && baseUrl.indexOf('/person/popular') === -1;
     }
 
     // Проверяет, имеет ли категория больше одной страницы результатов.

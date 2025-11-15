@@ -102,6 +102,7 @@
         return isTmdbApi || isLnumApi;
     }
 
+    // Используется для показа кнопки "Ещё" (должно быть только на первой странице)
     function hasMorePage(data) {
         return !!data
             && Array.isArray(data.results)
@@ -122,7 +123,7 @@
 
         window.trash_filter_plugin = true;
 
-        // 1. Добавляет кнопку "Ещё".
+        // 1. Добавляет кнопку "Ещё" (использует hasMorePage, включая проверку page === 1).
         Lampa.Listener.follow('line', function (event) {
             if (event.type !== 'visible' || !hasMorePage(event.data)) {
                 return;
@@ -153,9 +154,11 @@
             lineHeader$.append(button);
         });
         
-        // 2. Управляет навигацией.
+        // 2. Управляет навигацией при скролле.
         Lampa.Listener.follow('line', function (event) {
-            if (event.type !== 'append' || !hasMorePage(event.data)) {
+            // Условие изменено: проверяем, что это событие добавления И что фильтрация удалила элементы.
+            // Проверку data.page === 1 мы убрали.
+            if (event.type !== 'append' || event.data.original_length === event.data.results.length) {
                 return;
             }
 

@@ -2,13 +2,10 @@
     'use strict';
 
     // =========================================================================
-    // I. ОБЪЯВЛЕНИЕ ПЕРЕМЕННЫХ И REGEX (Оптимизация)
-    // Регулярные выражения компилируются один раз при загрузке плагина.
+    // I. ОБЪЯВЛЕНИЕ ПЕРЕМЕННЫХ И REGEX
     // =========================================================================
 
-    // Строгий белый список для Title: разрешает только кириллицу, цифры, пробелы и пунктуацию.
     var allowedTitleCharsRegex = /^[А-Яа-яЁё0-9\s.,'":!?-]+$/; 
-    // Проверка на наличие хотя бы одной кириллицы ИЛИ цифры в названии.
     var requiredTitleCharsRegex = /[А-Яа-яЁё0-9]/; 
     
     // =========================================================================
@@ -49,21 +46,24 @@
                 return results.filter(function(item) {
                     if (!item) return true;
                     
-                    // 1. Проверка на наличие даты релиза (movie: release_date, tv: first_air_date).
+                    // 1. Проверка на наличие постера.
+                    if (!item.poster_path) {
+                        return false;
+                    }
+
+                    // 2. Проверка на наличие даты релиза.
                     if (!item.release_date && !item.first_air_date) {
                         return false;
                     }
                     
-                    // 2. Условие: Оригинальный язык - Русский
+                    // 3. Условие: Оригинальный язык - Русский
                     var isRussian = (item.original_language && item.original_language.toLowerCase() === 'ru');
                     
-                    // 3. Условие: Title соответствует строгому белому списку
+                    // 4. Условие: Title соответствует строгому белому списку
                     var isTitlePureCyrillicOrNumber = false;
 
                     if (item.title) {
-                        // Title должен состоять ТОЛЬКО из разрешенных символов
                         var containsOnlyAllowedChars = allowedTitleCharsRegex.test(item.title);
-                        // Title должен содержать значимые символы
                         var containsRequiredChars = requiredTitleCharsRegex.test(item.title);
                         
                         isTitlePureCyrillicOrNumber = containsOnlyAllowedChars && containsRequiredChars;
@@ -89,15 +89,12 @@
     // IV. УТИЛИТЫ И ПРОВЕРКИ
     // =========================================================================
 
-    // Проверяет, применим ли фильтр к данному URL.
     function isFilterApplicable(baseUrl) {
-        // Исключаем /search/ и /person/popular, но разрешаем /person/{id}/combined_credits.
         return baseUrl.indexOf('/3/') > -1
             && baseUrl.indexOf('/search') === -1
-            && baseUrl.indexOf('/person/popular') === -1;
+            && baseUrl.indexOf('/person/popular') === -1; 
     }
 
-    // Проверяет, имеет ли категория больше одной страницы результатов.
     function hasMorePage(data) {
         return !!data
             && Array.isArray(data.results)
@@ -168,22 +165,18 @@
         });
 
         // 4. Применяет Post-Filters.
-        // Теперь фильтрация применяется к массивам: results, cast И crew.
         Lampa.Listener.follow('request_secuses', function (event) {
             if (isFilterApplicable(event.params.url) && event.data) {
                 
-                // Обработка стандартного массива 'results'
                 if (Array.isArray(event.data.results)) {
                     event.data.original_length = event.data.results.length;
                     event.data.results = postFilters.apply(event.data.results);
                 }
                 
-                // НОВОЕ: Обработка массива 'cast' (для combined_credits)
                 if (Array.isArray(event.data.cast)) {
                     event.data.cast = postFilters.apply(event.data.cast);
                 }
                 
-                // НОВОЕ: Обработка массива 'crew' (для combined_credits)
                 if (Array.isArray(event.data.crew)) {
                     event.data.crew = postFilters.apply(event.data.crew);
                 }
@@ -191,7 +184,6 @@
         });
     }
 
-    // Запуск плагина после готовности Lampa.
     if (window.appready) {
         start();
     } else {

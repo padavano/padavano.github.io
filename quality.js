@@ -379,7 +379,7 @@
         "WEB-DLRip @ Синема УС": "1080",
         "Blu-ray disc 1080P": "1080",
         "Blu-Ray Remux (1080P)": "1080",
-        "BDRemux 1080P] [Крупный план]": "1080",
+        "BDRemux 1080p": "1080",
         "Blu-ray disc (custom) 1080P]": "1080",
         "Blu-ray disc (custom) 1080P] [StudioCanal]": "1080",
         "1080p": "1080",
@@ -395,7 +395,8 @@
         "1080p web-dlrip": "1080",
         "webdlrip": "1080",
         "hdtvrip-avc": "1080",
-        "bdrip": "1080",
+        "bdrip (1080)": "1080",
+        "bdrip 1080": "1080",
         "HDTVRip (1080p)": "1080",
         "HDTV": "1080",
         
@@ -404,9 +405,15 @@
         "HDTVRip 720p": "720",
         "hdrip": "720",
         "hdtvrip (720p)": "720",
+        "bdrip (720)": "720",
+        "bdrip 720": "720",
+        "bdrip": "720",
         "DVDRip": "720",
+        "720p": "720",
+        "720": "720",
         
         //Группа низкого качества - 480p
+        "SD": "SD",
         "480p": "SD",
         "480": "SD",
         
@@ -1064,8 +1071,8 @@
         }
 
     var searchStrategies = [];
-    var titleExists = normalizedCard.title && (/[a-zа-я]/i.test(normalizedCard.title) || /^\d+$/.test(normalizedCard.title)); // [ИЗМЕНЕНО v1.03] Убрана 'ё' из-за нормализации
-    var originalTitleExists = normalizedCard.original_title && (/[a-zа-я]/i.test(normalizedCard.original_title) || /^\d+$/.test(normalizedCard.original_title)); // [ИЗМЕНЕНО v1.03] Убрана 'ё' из-за нормализации
+    var titleExists = normalizedCard.title && (/[a-zа-яё]/i.test(normalizedCard.title) || /^\d+$/.test(normalizedCard.title));
+    var originalTitleExists = normalizedCard.original_title && (/[a-zа-яё]/i.test(normalizedCard.original_title) || /^\d+$/.test(normalizedCard.original_title));
 
     // --- Стратегия 1: Original Title + Year ---
     if (originalTitleExists && tmdbYear) {
@@ -1289,7 +1296,7 @@
             if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "card: " + cardId + ", .full-start-new__rate-line not found, skipping loading animation.");
         }
         
-        // [ИЗМЕНЕНО v1.03] Проверка на отсутствие даты релиза.
+        // [НОВОЕ v1.02] Проверка на отсутствие даты релиза.
         if (!normalizedCard.release_date) {
             if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "card: " + cardId + ", No release date found. Skipping JacRed search and setting N/A.");
             removeLoadingAnimation(cardId, renderElement);
@@ -1458,15 +1465,6 @@
             release_date: cardData.release_date || cardData.first_air_date || ''
         };
         var cardId = normalizedCard.id;
-        
-        // [НОВОЕ v1.03] Проверка на отсутствие даты релиза для мини-карточек
-        if (!normalizedCard.release_date) {
-            if (LQE_CONFIG.LOGGING_CARDLIST) console.log("LQE-CARDLIST", "card: " + cardId + ", No release date found. Skipping JacRed search and setting N/A.");
-            // forceVisible = true, чтобы N/A отобразился поверх заглушки
-            updateCardListQualityElement(cardView, LQE_QUALITY_NO_INFO_CODE, LQE_QUALITY_NO_INFO_LABEL, true, false);
-            return;
-        }
-        
         var cacheKey = LQE_CONFIG.CACHE_VERSION + '_' + (isTvSeries ? 'tv_' : 'movie_') + normalizedCard.id;
 
         var cachedQualityData = getQualityCache(cacheKey);
@@ -1612,7 +1610,7 @@
     });
 
     function initializeLampaQualityPlugin() {
-        if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "Lampa Quality Enhancer: Plugin Initialization Started! (v1.03)");
+        if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "Lampa Quality Enhancer: Plugin Initialization Started! (v1.02)");
         window.lampaQualityPlugin = true;
 
         observer.observe(document.body, {

@@ -46,7 +46,7 @@
                 return results.filter(function(item) {
                     if (!item) return true;
                     
-                    // 1. Проверка на наличие постера.
+                    // 1. Проверка на наличие постера (базовая фильтрация мусора).
                     if (!item.poster_path) {
                         return false;
                     }
@@ -69,7 +69,7 @@
                         isTitlePureCyrillicOrNumber = containsOnlyAllowedChars && containsRequiredChars;
                     }
                     
-                    // Белый список: Оставляем, если выполнено (Условие 2 ИЛИ Условие 3)
+                    // Белый список: Оставляем, если выполнено (Условие 3 ИЛИ Условие 4)
                     var keepItem = isRussian || isTitlePureCyrillicOrNumber;
 
                     return keepItem;
@@ -89,10 +89,17 @@
     // IV. УТИЛИТЫ И ПРОВЕРКИ
     // =========================================================================
 
+    // Проверяет, применим ли фильтр к данному URL (TMDB ИЛИ LNUM).
     function isFilterApplicable(baseUrl) {
-        return baseUrl.indexOf('/3/') > -1
+        // Условие 1: TMDB API (исключая поиск и списки актеров)
+        var isTmdbApi = baseUrl.indexOf('/3/') > -1
             && baseUrl.indexOf('/search') === -1
             && baseUrl.indexOf('/person/popular') === -1; 
+
+        // Условие 2: LNUM API (по домену)
+        var isLnumApi = baseUrl.indexOf('levende-develop.workers.dev') > -1;
+
+        return isTmdbApi || isLnumApi;
     }
 
     function hasMorePage(data) {
@@ -168,15 +175,18 @@
         Lampa.Listener.follow('request_secuses', function (event) {
             if (isFilterApplicable(event.params.url) && event.data) {
                 
+                // Обработка стандартных массивов TMDB и LNUM
                 if (Array.isArray(event.data.results)) {
                     event.data.original_length = event.data.results.length;
                     event.data.results = postFilters.apply(event.data.results);
                 }
                 
+                // Обработка массива 'cast' (для combined_credits)
                 if (Array.isArray(event.data.cast)) {
                     event.data.cast = postFilters.apply(event.data.cast);
                 }
                 
+                // Обработка массива 'crew' (для combined_credits)
                 if (Array.isArray(event.data.crew)) {
                     event.data.crew = postFilters.apply(event.data.crew);
                 }

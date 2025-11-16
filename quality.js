@@ -1,10 +1,9 @@
-// Версия 1.03
+// Версия 1.04
 // Ссылка на плагин: https://padavano.github.io/quality.js
-// [ИЗМЕНЕНИЯ v1.03]
-// 1. Изменен приоритет определения качества: сначала используется свойство 'quality', 
-//    а 'title' парсится только как резервный вариант (в calculateTorrentScore).
-// 2. Добавлена логика обработки 1440p (2K) и 360p (SD) в calculateTorrentScore.
-// 3. Расширен диапазон 'SD' в translateQualityLabel для включения 360p.
+// [ИЗМЕНЕНИЯ v1.04]
+// 1. Изменена метка низкого качества с "TS" на "BAD"
+// 2. Изменена логика translateQualityLabel: приоритет 'qualityCode', затем парсинг 'title', затем 'QUALITY_DISPLAY_MAP'
+// 3. Очищена карта QUALITY_DISPLAY_MAP от записей, дублирующих парсинг разрешения
 
 (function() {
     'use strict';
@@ -48,6 +47,7 @@
     
     var LQE_QUALITY_NO_INFO_CODE = 'NO_INFO';
     var LQE_QUALITY_NO_INFO_LABEL = 'N/A';
+    var LQE_QUALITY_BAD_LABEL = 'BAD';
 
     // --- Модуль постоянного кэша (с TTL и лимитом размера) ---
     
@@ -344,6 +344,7 @@
 
     /**
      * Карта для перевода специфических торрент-лейблов в упрощенные категории.
+     * Используется как fallback, если не удалось определить качество по 'quality' или парсингом 'title'.
      */
     var QUALITY_DISPLAY_MAP = {
         //Группа самого высогого качества - 4K
@@ -358,9 +359,6 @@
         "4K, HEVC, HDR, Dolby Vision / Blu-Ray Remux (2160p)": "4K",
         "Blu-Ray Remux 2160p | 4K | HDR | Dolby Vision P7": "4K",
         "4K, HEVC, HDR / WEB-DLRip (2160p)": "4K",
-        "2160p": "4K",
-        "4k": "4K",
-        "4К": "4K",
         "blu-ray remux (2160p)": "4K",
         "hdtvrip 2160p": "4K",
         "hybrid 2160p": "4K",
@@ -378,14 +376,8 @@
         "BDRemux 1080p": "1080",
         "Blu-ray disc (custom) 1080P]": "1080",
         "Blu-ray disc (custom) 1080P] [StudioCanal]": "1080",
-        "1080p": "1080",
-        "1080": "1080",
-        "1080i": "1080",
-        "hdtv 1080i": "1080",
         "webdl": "1080",
         "web-dl": "1080",
-        "web-dl (1080p)": "1080",
-        "web-dl 1080p": "1080",
         "webrip": "1080",
         "web-dlrip": "1080",
         "1080p web-dlrip": "1080",
@@ -405,22 +397,18 @@
         "bdrip 720": "720",
         "bdrip": "720",
         "DVDRip": "720",
-        "720p": "720",
-        "720": "720",
         
         //Группа низкого качества - 480p
         "SD": "SD",
-        "480p": "SD",
-        "480": "SD",
         
         //Группа самого низкого качества - TS и CamRip
-        "Telecine [H.264/1080P] [звук с TS] [AD]": "TS",
-        "WEBRip 1080p | AVC @ звук с TS": "TS",
-        "звук с TS": "TS",
-        "TeleSynch 1080P": "TS",        
-        "telecine": "TS",
-        "tc": "TS",
-        "ts": "TS",
+        "Telecine [H.264/1080P] [звук с TS] [AD]": "BAD",
+        "WEBRip 1080p | AVC @ звук с TS": "BAD",
+        "звук с TS": "BAD",
+        "TeleSynch 1080P": "BAD",        
+        "telecine": "BAD",
+        "tc": "BAD",
+        "ts": "BAD",
         "camrip": "CamRip"
     };
 
@@ -662,88 +650,78 @@
     }
 
     /**
-     * Функция для перевода качества, теперь использует новую логику категоризации.
-     * Приоритет: TS > SD > Разрешение
+     * [v1.04] Функция для перевода качества с новой логикой приоритетов.
+     * Приоритет: BAD > qualityCode (число) > Парсинг title > QUALITY_DISPLAY_MAP (fallback)
      */
     function translateQualityLabel(qualityCode, fullTorrentTitle) {
         if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "translateQualityLabel: Received qualityCode:", qualityCode, "fullTorrentTitle:", fullTorrentTitle);
 
         const lowerFullTorrentTitle = (fullTorrentTitle || '').toLowerCase();
-        let finalDisplayLabel = '';
         
-        // Шаг 0: Проверка на NO_INFO
+        // Шаг 1: Проверка на NO_INFO
         if (qualityCode === LQE_QUALITY_NO_INFO_CODE) {
             if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "translateQualityLabel: NO_INFO code received. Displaying N/A.");
             return LQE_QUALITY_NO_INFO_LABEL;
         }
 
-        // --- Шаг 1: Проверка на низкое качество (TS, CamRIP) ---
-        // Ищем любое из 'плохих' ключевых слов в полном заголовке торрента.
+        // --- Шаг 2: Проверка на низкое качество (TS, CamRIP) ---
+        // (Идея 1, пункт 1 - меняем метку на 'BAD')
         const isLowQuality = LQE_LOW_QUALITY_KEYWORDS.some(function(keyword) {
             if (lowerFullTorrentTitle.includes(keyword)) {
-                if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "translateQualityLabel: Found low quality keyword: \"" + keyword + "\". Triggering TS category.");
+                if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "translateQualityLabel: Found low quality keyword: \"" + keyword + "\". Triggering BAD category.");
                 return true;
             }
             return false;
         });
 
         if (isLowQuality) {
-            finalDisplayLabel = 'TS';
-            return finalDisplayLabel;
+            return LQE_QUALITY_BAD_LABEL; // <-- ИЗМЕНЕНИЕ
         }
 
-        // --- Шаг 2: Проверка ручного маппинга для сложных случаев ---
+        // --- Шаг 3: Проверка по свойству 'quality' (число) ---
+        // (Идея 1, пункт 2)
+        let numericQuality = parseInt(qualityCode, 10);
+        
+        if (!isNaN(numericQuality) && numericQuality > 0) {
+            if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "translateQualityLabel: Using 'qualityCode' property:", numericQuality);
+            if (numericQuality >= 2160) return '4K';
+            if (numericQuality >= 1440) return '2K';
+            if (numericQuality >= 1080) return '1080';
+            if (numericQuality >= 720) return '720';
+            if (numericQuality >= 360) return 'SD';
+            // Если число < 360, оно не получает метку и идет дальше
+        }
+
+        // --- Шаг 4: Парсинг 'title' ---
+        // (Идея 1, пункт 3)
+        let numericFromTitle = extractNumericQualityFromTitle(lowerFullTorrentTitle);
+        if (numericFromTitle > 0) {
+            if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "translateQualityLabel: Using parsed 'title' resolution:", numericFromTitle);
+            if (numericFromTitle >= 2160) return '4K';
+            if (numericFromTitle >= 1440) return '2K';
+            if (numericFromTitle >= 1080) return '1080';
+            if (numericFromTitle >= 720) return '720';
+            if (numericFromTitle >= 360) return 'SD';
+            // Если число < 360, оно не получает метку и идет дальше
+        }
+
+        // --- Шаг 5: Проверка по ручной карте (Fallback) ---
+        // (Идея 1, пункт 4)
         for (const key in QUALITY_DISPLAY_MAP) {
             if (QUALITY_DISPLAY_MAP.hasOwnProperty(key)) {
                 if (lowerFullTorrentTitle.includes(String(key).toLowerCase())) {
-                    finalDisplayLabel = QUALITY_DISPLAY_MAP[key];
+                    var finalDisplayLabel = QUALITY_DISPLAY_MAP[key];
                     if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "translateQualityLabel: Found explicit direct map match for key \"" + key + "\". Displaying \"" + finalDisplayLabel + "\".");
-                    // Если ручной маппинг явно установил TS или SD, возвращаем его
-                    if (finalDisplayLabel === 'TS' || finalDisplayLabel === 'SD') return finalDisplayLabel;
-                    // Если маппинг качественный, возвращаем его
-                    if (finalDisplayLabel === '4K' || finalDisplayLabel === '2K' || finalDisplayLabel === '1080' || finalDisplayLabel === '720') return finalDisplayLabel;
+                    return finalDisplayLabel;
                 }
             }
         }
 
-        // --- Шаг 3: Категоризация по разрешению (для качественных релизов) ---
-        let numericQuality = parseInt(qualityCode, 10);
-        
-        // Попытка извлечь разрешение из fullTorrentTitle, если qualityCode не число
-        if (isNaN(numericQuality) || numericQuality === 0) {
-             const resolutionMatch = lowerFullTorrentTitle.match(/(\d{3,4}p)|(4k)|(4\s*к)/);
-             if (resolutionMatch) {
-                 // Пытаемся получить числовое значение из 1080p, 4k, 4 к
-                 var matchValue = resolutionMatch[1] || resolutionMatch[2] || resolutionMatch[3];
-                 if (matchValue) {
-                    numericQuality = parseInt(matchValue.replace('p', '').replace(/\s*к/, ''), 10);
-                 }
-
-                 if (isNaN(numericQuality)) {
-                     if (resolutionMatch[2] || resolutionMatch[3]) numericQuality = 2160;
-                 }
-             }
-        }
-
-        if (numericQuality >= 2160) {
-            finalDisplayLabel = '4K';
-        } else if (numericQuality >= 1440) {
-            finalDisplayLabel = '2K';
-        } else if (numericQuality >= 1080) {
-            finalDisplayLabel = '1080';
-        } else if (numericQuality >= 720) {
-            finalDisplayLabel = '720';
-        } else if (numericQuality >= 360) {
-            finalDisplayLabel = 'SD';
-        } else {
-            // Если не удалось определить ничего, и JacRed не дал качество, помечаем как неизвестное
-            finalDisplayLabel = LQE_QUALITY_NO_INFO_LABEL;
-            if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "translateQualityLabel: Failed to determine quality. Displaying N/A.");
-        }
-
-        if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "translateQualityLabel: Final display label:", finalDisplayLabel);
-        return finalDisplayLabel;
+        // --- Шаг 6: Финальный fallback ---
+        if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "translateQualityLabel: Failed to determine quality. Displaying N/A.");
+        return LQE_QUALITY_NO_INFO_LABEL;
     }
+
 
     /**
      * @param {string} title 

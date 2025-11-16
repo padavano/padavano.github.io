@@ -1,10 +1,16 @@
+Lampa.Platform.tv();
+
 (function () {
     let Component = Lampa.Component;
     let Controller = Lampa.Controller;
     let Utils = Lampa.Utils;
-    let Params = Lampa.Storage.field('full_btn_priority', '');
-
-    Params.value = '';
+    
+    // Защита: Проверяем, существует ли Storage, прежде чем вызвать .field
+    let Params = null;
+    if (Lampa.Storage && typeof Lampa.Storage.field === 'function') {
+        Params = Lampa.Storage.field('full_btn_priority', '');
+        Params.value = '';
+    }
 
     Lampa.Listener.follow('controller', function (e) {
         if (e.type == 'look_make_buttons') {
@@ -36,27 +42,40 @@
         }
     });
 
+    // Используем Component.Button, который должен быть определен
     Lampa.Plugin.create({
         title: 'Sort buttons',
         id: 'sort_buttons',
         component: Component.Button,
         onStart: function () {
-            Params.value = '';
+            // Гарантированная переинициализация после полной загрузки
+            if (Lampa.Storage && typeof Lampa.Storage.field === 'function') {
+                Params = Lampa.Storage.field('full_btn_priority', '');
+                Params.value = '';
+            }
         },
         onStop: function () {
-            Params.value = '';
+            if (Params) {
+                Params.value = '';
+            }
         },
         settings: function () {
             let field = {
                 name: 'full_btn_priority',
                 title: 'Default button priority',
                 type: 'select',
-                value: Params.value,
+                // Защита: если Params не определен, используем пустую строку
+                value: Params ? Params.value : '', 
             };
 
             field.onSelect = function (data) {
-                Params.value = data.value;
-                Lampa.Storage.set('full_btn_priority', data.value);
+                if (Params) {
+                    Params.value = data.value;
+                }
+                // Защита: проверяем Storage перед использованием set
+                if (Lampa.Storage) {
+                    Lampa.Storage.set('full_btn_priority', data.value);
+                }
             };
 
             return [field];

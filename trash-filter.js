@@ -9,7 +9,7 @@
     var requiredTitleCharsRegex = /[А-Яа-яЁё0-9]/; 
     
     // =========================================================================
-    // II. ФИЛЬТРЫ ЗАПРОСОВ (Pre-Filters) - Изменяют URL запроса
+    // II. ФИЛЬТРЫ ЗАПРОСОВ (Pre-Filters)
     // =========================================================================
     var preFilters = {
         filters: [
@@ -38,7 +38,7 @@
     };
 
     // =========================================================================
-    // III. ФИЛЬТРЫ РЕЗУЛЬТАТОВ (Post-Filters) - Изменяют массив данных
+    // III. ФИЛЬТРЫ РЕЗУЛЬТАТОВ (Post-Filters)
     // =========================================================================
     var postFilters = {
         filters: [
@@ -46,10 +46,8 @@
                 return results.filter(function(item) {
                     if (!item) return true;
                     
-                    // --- КРИТИЧЕСКОЕ ИЗМЕНЕНИЕ: Идентификация объекта "Персона" ---
-                    // Проверяем, является ли объект актером/членом команды:
-                    // - Есть имя ('name')
-                    // - ОТСУТСТВУЮТ основные поля контента ('title', 'poster_path', 'release_date')
+                    // --- Идентификация объекта "Персона" ---
+                    // Пропускаем фильтрацию контента для персон, чтобы отображались актеры/режиссеры.
                     var isPersonObject = (
                         item.name && 
                         !item.title && 
@@ -59,7 +57,7 @@
                     );
 
                     if (isPersonObject) {
-                        return true; // Пропускаем фильтрацию контента для персон.
+                        return true;
                     }
 
                     // --- Фильтрация объекта "Контент" (Фильм/Сериал) ---
@@ -106,13 +104,13 @@
     // IV. УТИЛИТЫ И ПРОВЕРКИ
     // =========================================================================
 
-    // Проверяет, является ли URL запросом к LNUM (по домену).
+    // Проверяет, является ли URL запросом к LNUM.
     function isLnumUrl(data) {
         var url = data && data.url ? data.url : data;
         return typeof url === 'string' && url.indexOf('levende-develop.workers.dev') > -1;
     }
 
-    // Проверяет, является ли запрос LNUM списком категорий/линий (содержит '/list').
+    // Проверяет, является ли запрос LNUM списком категорий/линий ('/list').
     function isLnumCategoryList(url) {
         return isLnumUrl(url) && url.indexOf('/list') > -1;
     }
@@ -128,7 +126,7 @@
         return isTmdbApi || isLnumApi;
     }
 
-    // Логика для показа кнопки "Ещё", если фильтрация сократила список.
+    // Логика для показа кнопки "Ещё".
     function hasMorePage(data) {
         if (isLnumUrl(data)) {
              return !!data
@@ -156,7 +154,7 @@
 
         window.trash_filter_plugin = true;
 
-        // 1. Добавляет кнопку "Ещё".
+        // 1. Добавляет кнопку "Ещё" в линиях контента.
         Lampa.Listener.follow('line', function (event) {
             if (event.type !== 'visible' || !hasMorePage(event.data)) {
                 return;
@@ -217,7 +215,7 @@
                 
                 var isCategoryList = isLnumCategoryList(event.params.url);
 
-                // Фильтрация основного массива 'results'
+                // Фильтрация основного массива 'results' (Рекомендации, Похожие, Главные страницы)
                 if (Array.isArray(event.data.results)) {
                     
                     event.data.original_length = event.data.results.length;
@@ -226,6 +224,11 @@
                     if (!isCategoryList) {
                         event.data.results = postFilters.apply(event.data.results);
                     }
+                }
+                
+                // --- ДОПОЛНЕНИЕ: Фильтрация массива 'parts' (Коллекции) ---
+                if (Array.isArray(event.data.parts)) {
+                    event.data.parts = postFilters.apply(event.data.parts);
                 }
                 
                 // Фильтрация массивов 'cast'

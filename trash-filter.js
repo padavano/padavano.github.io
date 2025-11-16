@@ -89,6 +89,11 @@
     // IV. УТИЛИТЫ И ПРОВЕРКИ
     // =========================================================================
 
+    // Проверяет, является ли URL запросом к LNUM.
+    function isLnumUrl(data) {
+        return data.url && data.url.indexOf('levende-develop.workers.dev') > -1;
+    }
+
     // Проверяет, применим ли фильтр к данному URL (TMDB ИЛИ LNUM).
     function isFilterApplicable(baseUrl) {
         // Условие 1: TMDB API (исключая поиск и списки актеров)
@@ -98,20 +103,21 @@
 
         // Условие 2: LNUM API (по домену)
         var isLnumApi = baseUrl.indexOf('levende-develop.workers.dev') > -1;
+        
+        // КРИТИЧЕСКОЕ ИСКЛЮЧЕНИЕ: НЕ применяем фильтр, если это запрос списка категорий LNUM,
+        // поскольку это блокирует пагинацию самих подборок на главной странице.
+        var isLnumCategoryList = baseUrl.indexOf('/list//s') > -1; 
+
+        if (isLnumCategoryList) {
+            return false;
+        }
 
         return isTmdbApi || isLnumApi;
-    }
-    
-    // Проверяет, является ли URL запросом к LNUM.
-    function isLnumUrl(data) {
-        return data.url && data.url.indexOf('levende-develop.workers.dev') > -1;
     }
 
     // Используется для показа кнопки "Ещё" (должно быть только на первой странице)
     function hasMorePage(data) {
-        // ИСПРАВЛЕНИЕ: Исключаем LNUM URL из этой логики,
-        // чтобы не блокировать подгрузку следующих страниц Lampa,
-        // если LNUM не использует total_pages.
+        // Исключаем LNUM URL из логики кнопки "Ещё".
         if (isLnumUrl(data)) {
             return false;
         }
@@ -166,11 +172,8 @@
             lineHeader$.append(button);
         });
         
-        // 2. Управляет навигацией при скролле.
+        // 2. Управляет навигацией при скролле (Только если произошла фильтрация).
         Lampa.Listener.follow('line', function (event) {
-            // ОТКАТ: Возвращена чистая логика. Запуск только если произошла фильтрация.
-            // Принудительное исключение LNUM здесь не нужно, т.к. LNUM теперь
-            // должен работать через Lampa по умолчанию, если фильтрации не было.
             if (event.type !== 'append' || event.data.original_length === event.data.results.length) {
                 return;
             }

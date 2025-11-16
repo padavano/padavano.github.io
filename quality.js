@@ -1,9 +1,13 @@
 // Версия 1.04
 // Ссылка на плагин: https://padavano.github.io/quality.js
 // [ИЗМЕНЕНИЯ v1.04]
-// 1. Изменена метка низкого качества с "TS" на "BAD"
-// 2. Изменена логика translateQualityLabel: приоритет 'qualityCode', затем парсинг 'title', затем 'QUALITY_DISPLAY_MAP'
-// 3. Очищена карта QUALITY_DISPLAY_MAP от записей, дублирующих парсинг разрешения
+// 1. Изменена метка низкого качества с "TS" на "BAD".
+// 2. Изменена логика translateQualityLabel: приоритет 'qualityCode', затем парсинг 'title', затем 'QUALITY_DISPLAY_MAP'.
+// 3. Очищена карта QUALITY_DISPLAY_MAP от записей, дублирующих парсинг разрешения.
+// 4. Проверка LQE_LOW_QUALITY_KEYWORDS переведена с string.includes() на RegExp.
+// 5. Добавлены "безопасные" Regex-правила для 'ts' и 'ad' (/\bts\b/ и /\bad\b/).
+// 6. Создана единая функция lqeCheckIsLowQuality() для всех проверок на низкое качество.
+
 
 (function() {
     'use strict';
@@ -408,19 +412,44 @@
         "TeleSynch 1080P": "BAD",        
         "telecine": "BAD",
         "tc": "BAD",
-        "ts": "BAD",
+        "ts": "BAD", // Это правило сработает только если слово "ts" есть в карте
         "camrip": "CamRip"
     };
 
     /**
-     * Список низкокачественных ключевых слов, которые имеют приоритет.
+     * [v1.05] Список низкокачественных ключевых слов в виде RegExp для безопасного поиска.
+     * Используется \b для "границ слова", чтобы 'ts' не совпало с 'dts'.
      */
-    var LQE_LOW_QUALITY_KEYWORDS = [
-        'telesync', 'telecine', 'camrip', 'экранка',
-        'звук с ts', 'audio ts', 'ts audio', 'hdts', 'hdcam', 'hdtc',
-        'webrip с ts', 'webrp.ts', 'web-dl с ts', 'web-dl ts',
-        'zets', 'zet-ts'
+    var LQE_LOW_QUALITY_REGEX_LIST = [
+        /telesync/, /telecine/, /camrip/, /экранка/,
+        /звук с ts/, /audio ts/, /ts audio/, /hdts/, /hdcam/, /hdtc/,
+        /webrip с ts/, /webrp\.ts/, /web-dl с ts/, /web-dl ts/,
+        /zets/, /zet-ts/,
+        // [v1.05] Новые "безопасные" правила для 'ts' и 'ad' (используют границы слова \b)
+        /\bts\b/, 
+        /\bad\b/
     ];
+
+    /**
+     * [v1.05] Новая helper-функция для проверки на низкое качество
+     * @param {string} title 
+     * @returns {boolean}
+     */
+    function lqeCheckIsLowQuality(title) {
+        if (!title) return false;
+        var lowerTitle = title.toLowerCase();
+        
+        for (var i = 0; i < LQE_LOW_QUALITY_REGEX_LIST.length; i++) {
+            if (LQE_LOW_QUALITY_REGEX_LIST[i].test(lowerTitle)) {
+                if (LQE_CONFIG.LOGGING_QUALITY) {
+                    console.log("LQE-QUALITY", "lqeCheckIsLowQuality: Matched low quality keyword:", LQE_LOW_QUALITY_REGEX_LIST[i].source);
+                }
+                return true;
+            }
+        }
+        return false;
+    }
+
 
     var QUALITY_PRIORITY_ORDER = [
         'resolution',
@@ -665,21 +694,15 @@
         }
 
         // --- Шаг 2: Проверка на низкое качество (TS, CamRIP) ---
-        // (Идея 1, пункт 1 - меняем метку на 'BAD')
-        const isLowQuality = LQE_LOW_QUALITY_KEYWORDS.some(function(keyword) {
-            if (lowerFullTorrentTitle.includes(keyword)) {
-                if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "translateQualityLabel: Found low quality keyword: \"" + keyword + "\". Triggering BAD category.");
-                return true;
-            }
-            return false;
-        });
+        // [v1.05] Используем новую Regex-проверку
+        const isLowQuality = lqeCheckIsLowQuality(lowerFullTorrentTitle);
 
         if (isLowQuality) {
-            return LQE_QUALITY_BAD_LABEL; // <-- ИЗМЕНЕНИЕ
+            if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "translateQualityLabel: Found low quality keyword. Triggering BAD category.");
+            return LQE_QUALITY_BAD_LABEL;
         }
 
         // --- Шаг 3: Проверка по свойству 'quality' (число) ---
-        // (Идея 1, пункт 2)
         let numericQuality = parseInt(qualityCode, 10);
         
         if (!isNaN(numericQuality) && numericQuality > 0) {
@@ -693,7 +716,6 @@
         }
 
         // --- Шаг 4: Парсинг 'title' ---
-        // (Идея 1, пункт 3)
         let numericFromTitle = extractNumericQualityFromTitle(lowerFullTorrentTitle);
         if (numericFromTitle > 0) {
             if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "translateQualityLabel: Using parsed 'title' resolution:", numericFromTitle);
@@ -706,7 +728,6 @@
         }
 
         // --- Шаг 5: Проверка по ручной карте (Fallback) ---
-        // (Идея 1, пункт 4)
         for (const key in QUALITY_DISPLAY_MAP) {
             if (QUALITY_DISPLAY_MAP.hasOwnProperty(key)) {
                 if (lowerFullTorrentTitle.includes(String(key).toLowerCase())) {
@@ -816,12 +837,10 @@
         }
         
         // 3. Штраф за низкое качество
+        // [v1.05] Используем новую Regex-проверку
         const lowerTitle = torrentTitle.toLowerCase();
-        for (let i = 0; i < LQE_LOW_QUALITY_KEYWORDS.length; i++) {
-            if (lowerTitle.includes(LQE_LOW_QUALITY_KEYWORDS[i])) {
-                score -= 10000; // Очень большой штраф
-                break;
-            }
+        if (lqeCheckIsLowQuality(lowerTitle)) {
+            score -= 10000; // Очень большой штраф
         }
 
         // 4. Бонус за высококачественные маркеры (BDRemux, BD-Disk, HEVC)
@@ -945,14 +964,9 @@
                         }
 
                         if (currentNumericQuality >= 2160 && isYearValidForOptim && originalTitleMatched && localTitleMatched) {
-                             var lowerTitle = currentTorrent.title.toLowerCase();
-                             var isLowQuality = false;
-                             for (var k = 0; k < LQE_LOW_QUALITY_KEYWORDS.length; k++) {
-                                 if (lowerTitle.includes(LQE_LOW_QUALITY_KEYWORDS[k])) {
-                                     isLowQuality = true;
-                                     break;
-                                 }
-                             }
+                             // [v1.05] Используем новую Regex-проверку
+                             var isLowQuality = lqeCheckIsLowQuality(currentTorrent.title);
+
                              if (!isLowQuality) {
                                  bestNumericQuality = currentNumericQuality;
                                  bestFoundTorrent = currentTorrent;
@@ -1462,7 +1476,7 @@
                     if (LQE_CONFIG.LOGGING_CARDLIST) console.log("LQE-CARDLIST", "card: " + cardId + ", UI update completed for list card.");
 
                 } catch (e) {
-                    // [ИСПРАВЛЕНО v1.04]
+                    // [ИПРАВЛЕНО v1.04]
                     console.error("LQE-LOG", "card: " + cardId + ", CRITICAL SYNC ERROR inside JacRed result processing (List Card/Initial):", e);
                 } finally {
                     done();
@@ -1511,7 +1525,7 @@
     });
 
     function initializeLampaQualityPlugin() {
-        if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "Lampa Quality Enhancer: Plugin Initialization Started! (v1.04)");
+        if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "Lampa Quality Enhancer: Plugin Initialization Started! (v1.05)");
         window.lampaQualityPlugin = true;
 
         observer.observe(document.body, {

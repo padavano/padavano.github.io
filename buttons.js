@@ -1,21 +1,18 @@
 Lampa.Platform.tv();
 
 (function () {
+    // Получение основных классов Lampa. Они должны быть доступны, но
+    // мы их не трогаем, чтобы не нарушать структуру.
     let Component = Lampa.Component;
     let Controller = Lampa.Controller;
     let Utils = Lampa.Utils;
     
-    // Защита: Проверяем, существует ли Storage, прежде чем вызвать .field
+    // Params должен быть объявлен здесь, но инициализирован позже
     let Params = null;
-    if (Lampa.Storage && typeof Lampa.Storage.field === 'function') {
-        Params = Lampa.Storage.field('full_btn_priority', '');
-        Params.value = '';
-    }
 
+    // Сортировка кнопок (не зависит от Lampa.Plugin)
     Lampa.Listener.follow('controller', function (e) {
         if (e.type == 'look_make_buttons') {
-            let type = e.data.type;
-            let element = e.data.element;
             let buttons = e.data.buttons;
 
             let online = [];
@@ -42,44 +39,47 @@ Lampa.Platform.tv();
         }
     });
 
-    // Используем Component.Button, который должен быть определен
-    Lampa.Plugin.create({
-        title: 'Sort buttons',
-        id: 'sort_buttons',
-        component: Component.Button,
-        onStart: function () {
-            // Гарантированная переинициализация после полной загрузки
-            if (Lampa.Storage && typeof Lampa.Storage.field === 'function') {
-                Params = Lampa.Storage.field('full_btn_priority', '');
-                Params.value = '';
-            }
-        },
-        onStop: function () {
-            if (Params) {
-                Params.value = '';
-            }
-        },
-        settings: function () {
-            let field = {
-                name: 'full_btn_priority',
-                title: 'Default button priority',
-                type: 'select',
-                // Защита: если Params не определен, используем пустую строку
-                value: Params ? Params.value : '', 
-            };
-
-            field.onSelect = function (data) {
-                if (Params) {
-                    Params.value = data.value;
-                }
-                // Защита: проверяем Storage перед использованием set
+    // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Оборачиваем регистрацию плагина в проверку.
+    if (Lampa.Plugin && typeof Lampa.Plugin.create === 'function') {
+        Lampa.Plugin.create({
+            title: 'Sort buttons',
+            id: 'sort_buttons',
+            component: Component.Button,
+            
+            onStart: function () {
+                // Инициализация Params, когда Storage гарантированно доступен.
                 if (Lampa.Storage) {
-                    Lampa.Storage.set('full_btn_priority', data.value);
+                    Params = Lampa.Storage.field('full_btn_priority', '');
+                    Params.value = '';
                 }
-            };
+            },
+            
+            onStop: function () {
+                if (Params) {
+                    Params.value = '';
+                }
+            },
+            
+            settings: function () {
+                let field = {
+                    name: 'full_btn_priority',
+                    title: 'Default button priority',
+                    type: 'select',
+                    value: Params ? Params.value : '', 
+                };
 
-            return [field];
-        }
-    });
+                field.onSelect = function (data) {
+                    if (Params) {
+                        Params.value = data.value;
+                    }
+                    if (Lampa.Storage) {
+                        Lampa.Storage.set('full_btn_priority', data.value);
+                    }
+                };
+
+                return [field];
+            }
+        });
+    }
 
 })();

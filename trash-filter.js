@@ -91,7 +91,9 @@
 
     // Проверяет, является ли URL запросом к LNUM.
     function isLnumUrl(data) {
-        return data.url && data.url.indexOf('levende-develop.workers.dev') > -1;
+        // Проверяет, является ли data объектом, а не URL. Для hasMorePage и request_secuses.
+        var url = data && data.url ? data.url : data;
+        return typeof url === 'string' && url.indexOf('levende-develop.workers.dev') > -1;
     }
 
     // Проверяет, применим ли фильтр к данному URL (TMDB ИЛИ LNUM).
@@ -109,8 +111,7 @@
 
     // Используется для показа кнопки "Ещё" (должно быть только на первой странице)
     function hasMorePage(data) {
-        // КОРРЕКЦИЯ: Включаем LNUM в логику ручной кнопки "Ещё"
-        // только если произошла фильтрация, т.к. LNUM не использует total_pages.
+        // Логика для LNUM: активируем ручную кнопку "Ещё", если произошла фильтрация на первой странице.
         if (isLnumUrl(data)) {
              return !!data
                 && Array.isArray(data.results)
@@ -191,35 +192,28 @@
         Lampa.Listener.follow('request_secuses', function (event) {
             if (isFilterApplicable(event.params.url) && event.data) {
                 
-                // === КРИТИЧЕСКАЯ КОРРЕКЦИЯ ДЛЯ LNUM ===
-                var isLnumDynamicList = isLnumUrl(event.data) && event.params.url.indexOf('/list') > -1;
+                // Проверяем, является ли это LNUM-запросом, который возвращает список самих категорий/линий.
+                // Это URL, который содержит '/list' и возвращает массивы объектов-коллекций.
+                var isLnumCategoryList = isLnumUrl(event.params.url) && event.params.url.indexOf('/list') > -1;
 
                 // Обработка стандартных массивов TMDB и LNUM
                 if (Array.isArray(event.data.results)) {
                     
                     event.data.original_length = event.data.results.length;
-                    var filteredResults = postFilters.apply(event.data.results);
                     
-                    // Если это LNUM и мы фильтруем список категорий (который использует /list), 
-                    // то мы должны сохранить оригинальные параметры пагинации,
-                    // чтобы Lampa знала, что есть следующие страницы.
-                    if (isLnumDynamicList && filteredResults.length !== event.data.original_length) {
-                        // Важно: Мы фильтруем results, но сохраняем все остальные поля
-                        // (page, total_pages, original_url и т.д.) нетронутыми.
-                        // Lampa проверит original_length, увидит несоответствие и
-                        // активирует логику скролла (Пункт 2), которая заставит ее
-                        // запросить следующую страницу.
+                    // КРИТИЧЕСКОЕ ИЗМЕНЕНИЕ: Не применяем фильтр, если это список категорий LNUM,
+                    // чтобы не нарушать пагинацию главной страницы.
+                    if (!isLnumCategoryList) {
+                        event.data.results = postFilters.apply(event.data.results);
                     }
-
-                    event.data.results = filteredResults;
                 }
                 
-                // Обработка массива 'cast' (для combined_credits)
+                // Обработка массива 'cast' (для combined_credits) - всегда фильтруем
                 if (Array.isArray(event.data.cast)) {
                     event.data.cast = postFilters.apply(event.data.cast);
                 }
                 
-                // Обработка массива 'crew' (для combined_credits)
+                // Обработка массива 'crew' (для combined_credits) - всегда фильтруем
                 if (Array.isArray(event.data.crew)) {
                     event.data.crew = postFilters.apply(event.data.crew);
                 }

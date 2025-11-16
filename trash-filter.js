@@ -104,11 +104,13 @@
         // Условие 2: LNUM API (по домену)
         var isLnumApi = baseUrl.indexOf('levende-develop.workers.dev') > -1;
         
-        // КРИТИЧЕСКОЕ ИСКЛЮЧЕНИЕ: НЕ применяем фильтр, если это запрос списка категорий LNUM,
-        // поскольку это блокирует пагинацию самих подборок на главной странице.
-        var isLnumCategoryList = baseUrl.indexOf('/list//s') > -1; 
+        // ФИНАЛЬНОЕ КОРРЕКТИРУЮЩЕЕ ИСКЛЮЧЕНИЕ:
+        // НЕ применяем фильтр, если это запрос LNUM и URL содержит '/list'.
+        // Это исключает фильтрацию списка самих КАТЕГОРИЙ/ЛИНИЙ (которые используют /list),
+        // сохраняя при этом фильтрацию контента внутри статичных линий (например, /cartoons).
+        var isLnumListOrDynamicCollection = isLnumApi && baseUrl.indexOf('/list') > -1; 
 
-        if (isLnumCategoryList) {
+        if (isLnumListOrDynamicCollection) {
             return false;
         }
 

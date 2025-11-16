@@ -46,6 +46,24 @@
                 return results.filter(function(item) {
                     if (!item) return true;
                     
+                    // --- КРИТИЧЕСКОЕ ИЗМЕНЕНИЕ: Идентификация объекта "Персона" ---
+                    // Проверяем, является ли объект актером/членом команды:
+                    // - Есть имя ('name')
+                    // - ОТСУТСТВУЮТ основные поля контента ('title', 'poster_path', 'release_date')
+                    var isPersonObject = (
+                        item.name && 
+                        !item.title && 
+                        !item.poster_path && 
+                        !item.release_date && 
+                        !item.first_air_date
+                    );
+
+                    if (isPersonObject) {
+                        return true; // Пропускаем фильтрацию контента для персон.
+                    }
+
+                    // --- Фильтрация объекта "Контент" (Фильм/Сериал) ---
+                    
                     // 1. Быстрые проверки (наличие постера и даты).
                     if (!item.poster_path) {
                         return false;
@@ -95,7 +113,6 @@
     }
 
     // Проверяет, является ли запрос LNUM списком категорий/линий (содержит '/list').
-    // Это критически важно для восстановления пагинации LNUM.
     function isLnumCategoryList(url) {
         return isLnumUrl(url) && url.indexOf('/list') > -1;
     }
@@ -113,7 +130,6 @@
 
     // Логика для показа кнопки "Ещё", если фильтрация сократила список.
     function hasMorePage(data) {
-        // Для LNUM: активируем ручную кнопку "Ещё", если произошла фильтрация на page=1.
         if (isLnumUrl(data)) {
              return !!data
                 && Array.isArray(data.results)
@@ -121,7 +137,6 @@
                 && data.page === 1;
         }
 
-        // Логика для TMDB.
         return !!data
             && Array.isArray(data.results)
             && data.original_length !== data.results.length
@@ -172,7 +187,7 @@
             lineHeader$.append(button);
         });
         
-        // 2. Управляет навигацией при скролле (восстанавливает прокрутку после фильтрации).
+        // 2. Управляет навигацией при скролле.
         Lampa.Listener.follow('line', function (event) {
             if (event.type !== 'append' || event.data.original_length === event.data.results.length) {
                 return;
@@ -213,11 +228,12 @@
                     }
                 }
                 
-                // Фильтрация массивов 'cast' и 'crew' (всегда, т.к. они не ломают пагинацию линий)
+                // Фильтрация массивов 'cast'
                 if (Array.isArray(event.data.cast)) {
                     event.data.cast = postFilters.apply(event.data.cast);
                 }
                 
+                // Фильтрация массивов 'crew'
                 if (Array.isArray(event.data.crew)) {
                     event.data.crew = postFilters.apply(event.data.crew);
                 }

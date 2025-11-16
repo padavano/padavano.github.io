@@ -46,20 +46,20 @@
                 return results.filter(function(item) {
                     if (!item) return true;
                     
-                    // 1. Проверка на наличие постера (базовая фильтрация мусора).
+                    // НОВАЯ ПРОВЕРКА: Удаляем, если отсутствует постер.
                     if (!item.poster_path) {
                         return false;
                     }
 
-                    // 2. Проверка на наличие даты релиза.
+                    // 1. Проверка на наличие даты релиза.
                     if (!item.release_date && !item.first_air_date) {
                         return false;
                     }
                     
-                    // 3. Условие: Оригинальный язык - Русский
+                    // 2. Условие: Оригинальный язык - Русский
                     var isRussian = (item.original_language && item.original_language.toLowerCase() === 'ru');
                     
-                    // 4. Условие: Title соответствует строгому белому списку
+                    // 3. Условие: Title соответствует строгому белому списку
                     var isTitlePureCyrillicOrNumber = false;
 
                     if (item.title) {
@@ -69,7 +69,7 @@
                         isTitlePureCyrillicOrNumber = containsOnlyAllowedChars && containsRequiredChars;
                     }
                     
-                    // Белый список: Оставляем, если выполнено (Условие 3 ИЛИ Условие 4)
+                    // Белый список: Оставляем, если выполнено (Условие 2 ИЛИ Условие 3)
                     var keepItem = isRussian || isTitlePureCyrillicOrNumber;
 
                     return keepItem;
@@ -89,41 +89,13 @@
     // IV. УТИЛИТЫ И ПРОВЕРКИ
     // =========================================================================
 
-    // Проверяет, является ли URL запросом к LNUM.
-    function isLnumUrl(data) {
-        return data.url && data.url.indexOf('levende-develop.workers.dev') > -1;
-    }
-
-    // Проверяет, применим ли фильтр к данному URL (TMDB ИЛИ LNUM).
     function isFilterApplicable(baseUrl) {
-        // Условие 1: TMDB API (исключая поиск и списки актеров)
-        var isTmdbApi = baseUrl.indexOf('/3/') > -1
+        return baseUrl.indexOf('/3/') > -1
             && baseUrl.indexOf('/search') === -1
             && baseUrl.indexOf('/person/popular') === -1; 
-
-        // Условие 2: LNUM API (по домену)
-        var isLnumApi = baseUrl.indexOf('levende-develop.workers.dev') > -1;
-        
-        // ФИНАЛЬНОЕ КОРРЕКТИРУЮЩЕЕ ИСКЛЮЧЕНИЕ:
-        // НЕ применяем фильтр, если это запрос LNUM и URL содержит '/list'.
-        // Это исключает фильтрацию списка самих КАТЕГОРИЙ/ЛИНИЙ (которые используют /list),
-        // сохраняя при этом фильтрацию контента внутри статичных линий (например, /cartoons).
-        var isLnumListOrDynamicCollection = isLnumApi && baseUrl.indexOf('/list') > -1; 
-
-        if (isLnumListOrDynamicCollection) {
-            return false;
-        }
-
-        return isTmdbApi || isLnumApi;
     }
 
-    // Используется для показа кнопки "Ещё" (должно быть только на первой странице)
     function hasMorePage(data) {
-        // Исключаем LNUM URL из логики кнопки "Ещё".
-        if (isLnumUrl(data)) {
-            return false;
-        }
-
         return !!data
             && Array.isArray(data.results)
             && data.original_length !== data.results.length
@@ -174,9 +146,9 @@
             lineHeader$.append(button);
         });
         
-        // 2. Управляет навигацией при скролле (Только если произошла фильтрация).
+        // 2. Управляет навигацией.
         Lampa.Listener.follow('line', function (event) {
-            if (event.type !== 'append' || event.data.original_length === event.data.results.length) {
+            if (event.type !== 'append' || !hasMorePage(event.data)) {
                 return;
             }
 
@@ -196,18 +168,15 @@
         Lampa.Listener.follow('request_secuses', function (event) {
             if (isFilterApplicable(event.params.url) && event.data) {
                 
-                // Обработка стандартных массивов TMDB и LNUM
                 if (Array.isArray(event.data.results)) {
                     event.data.original_length = event.data.results.length;
                     event.data.results = postFilters.apply(event.data.results);
                 }
                 
-                // Обработка массива 'cast' (для combined_credits)
                 if (Array.isArray(event.data.cast)) {
                     event.data.cast = postFilters.apply(event.data.cast);
                 }
                 
-                // Обработка массива 'crew' (для combined_credits)
                 if (Array.isArray(event.data.crew)) {
                     event.data.crew = postFilters.apply(event.data.crew);
                 }

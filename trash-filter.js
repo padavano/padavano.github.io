@@ -46,20 +46,20 @@
                 return results.filter(function(item) {
                     if (!item) return true;
                     
-                    // НОВАЯ ПРОВЕРКА: Удаляем, если отсутствует постер.
+                    // 1. Проверка на наличие постера (базовая фильтрация мусора).
                     if (!item.poster_path) {
                         return false;
                     }
 
-                    // 1. Проверка на наличие даты релиза.
+                    // 2. Проверка на наличие даты релиза.
                     if (!item.release_date && !item.first_air_date) {
                         return false;
                     }
                     
-                    // 2. Условие: Оригинальный язык - Русский
+                    // 3. Условие: Оригинальный язык - Русский
                     var isRussian = (item.original_language && item.original_language.toLowerCase() === 'ru');
                     
-                    // 3. Условие: Title соответствует строгому белому списку
+                    // 4. Условие: Title соответствует строгому белому списку
                     var isTitlePureCyrillicOrNumber = false;
 
                     if (item.title) {
@@ -69,7 +69,7 @@
                         isTitlePureCyrillicOrNumber = containsOnlyAllowedChars && containsRequiredChars;
                     }
                     
-                    // Белый список: Оставляем, если выполнено (Условие 2 ИЛИ Условие 3)
+                    // Белый список: Оставляем, если выполнено (Условие 3 ИЛИ Условие 4)
                     var keepItem = isRussian || isTitlePureCyrillicOrNumber;
 
                     return keepItem;
@@ -89,13 +89,36 @@
     // IV. УТИЛИТЫ И ПРОВЕРКИ
     // =========================================================================
 
-    function isFilterApplicable(baseUrl) {
-        return baseUrl.indexOf('/3/') > -1
-            && baseUrl.indexOf('/search') === -1
-            && baseUrl.indexOf('/person/popular') === -1; 
+    // Проверяет, является ли URL запросом к LNUM.
+    function isLnumUrl(data) {
+        return data.url && data.url.indexOf('levende-develop.workers.dev') > -1;
     }
 
+    // Проверяет, применим ли фильтр к данному URL (TMDB ИЛИ LNUM).
+    function isFilterApplicable(baseUrl) {
+        // Условие 1: TMDB API (исключая поиск и списки актеров)
+        var isTmdbApi = baseUrl.indexOf('/3/') > -1
+            && baseUrl.indexOf('/search') === -1
+            && baseUrl.indexOf('/person/popular') === -1; 
+
+        // Условие 2: LNUM API (по домену)
+        var isLnumApi = baseUrl.indexOf('levende-develop.workers.dev') > -1;
+        
+        return isTmdbApi || isLnumApi;
+    }
+
+    // Используется для показа кнопки "Ещё" (должно быть только на первой странице)
     function hasMorePage(data) {
+        // КОРРЕКЦИЯ: Включаем LNUM в логику ручной кнопки "Ещё"
+        // только если произошла фильтрация, т.к. LNUM не использует total_pages.
+        if (isLnumUrl(data)) {
+             return !!data
+                && Array.isArray(data.results)
+                && data.original_length !== data.results.length
+                && data.page === 1;
+        }
+
+        // Логика для TMDB
         return !!data
             && Array.isArray(data.results)
             && data.original_length !== data.results.length
@@ -146,9 +169,9 @@
             lineHeader$.append(button);
         });
         
-        // 2. Управляет навигацией.
+        // 2. Управляет навигацией при скролле (Только если произошла фильтрация).
         Lampa.Listener.follow('line', function (event) {
-            if (event.type !== 'append' || !hasMorePage(event.data)) {
+            if (event.type !== 'append' || event.data.original_length === event.data.results.length) {
                 return;
             }
 
@@ -168,15 +191,35 @@
         Lampa.Listener.follow('request_secuses', function (event) {
             if (isFilterApplicable(event.params.url) && event.data) {
                 
+                // === КРИТИЧЕСКАЯ КОРРЕКЦИЯ ДЛЯ LNUM ===
+                var isLnumDynamicList = isLnumUrl(event.data) && event.params.url.indexOf('/list') > -1;
+
+                // Обработка стандартных массивов TMDB и LNUM
                 if (Array.isArray(event.data.results)) {
+                    
                     event.data.original_length = event.data.results.length;
-                    event.data.results = postFilters.apply(event.data.results);
+                    var filteredResults = postFilters.apply(event.data.results);
+                    
+                    // Если это LNUM и мы фильтруем список категорий (который использует /list), 
+                    // то мы должны сохранить оригинальные параметры пагинации,
+                    // чтобы Lampa знала, что есть следующие страницы.
+                    if (isLnumDynamicList && filteredResults.length !== event.data.original_length) {
+                        // Важно: Мы фильтруем results, но сохраняем все остальные поля
+                        // (page, total_pages, original_url и т.д.) нетронутыми.
+                        // Lampa проверит original_length, увидит несоответствие и
+                        // активирует логику скролла (Пункт 2), которая заставит ее
+                        // запросить следующую страницу.
+                    }
+
+                    event.data.results = filteredResults;
                 }
                 
+                // Обработка массива 'cast' (для combined_credits)
                 if (Array.isArray(event.data.cast)) {
                     event.data.cast = postFilters.apply(event.data.cast);
                 }
                 
+                // Обработка массива 'crew' (для combined_credits)
                 if (Array.isArray(event.data.crew)) {
                     event.data.crew = postFilters.apply(event.data.crew);
                 }

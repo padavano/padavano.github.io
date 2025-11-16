@@ -101,12 +101,18 @@
 
         return isTmdbApi || isLnumApi;
     }
+    
+    // Проверяет, является ли URL запросом к LNUM.
+    function isLnumUrl(data) {
+        return data.url && data.url.indexOf('levende-develop.workers.dev') > -1;
+    }
 
     // Используется для показа кнопки "Ещё" (должно быть только на первой странице)
     function hasMorePage(data) {
         // ИСПРАВЛЕНИЕ: Исключаем LNUM URL из этой логики,
-        // чтобы не блокировать подгрузку следующих страниц Lampa.
-        if (data.url && data.url.indexOf('levende-develop.workers.dev') > -1) {
+        // чтобы не блокировать подгрузку следующих страниц Lampa,
+        // если LNUM не использует total_pages.
+        if (isLnumUrl(data)) {
             return false;
         }
 
@@ -162,6 +168,9 @@
         
         // 2. Управляет навигацией при скролле.
         Lampa.Listener.follow('line', function (event) {
+            // ОТКАТ: Возвращена чистая логика. Запуск только если произошла фильтрация.
+            // Принудительное исключение LNUM здесь не нужно, т.к. LNUM теперь
+            // должен работать через Lampa по умолчанию, если фильтрации не было.
             if (event.type !== 'append' || event.data.original_length === event.data.results.length) {
                 return;
             }

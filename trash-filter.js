@@ -215,7 +215,7 @@
                 
                 var isCategoryList = isLnumCategoryList(event.params.url);
 
-                // Фильтрация основного массива 'results' (Рекомендации, Похожие, Главные страницы)
+                // Фильтрация основного массива 'results'
                 if (Array.isArray(event.data.results)) {
                     
                     event.data.original_length = event.data.results.length;
@@ -226,9 +226,14 @@
                     }
                 }
                 
-                // --- ДОПОЛНЕНИЕ: Фильтрация массива 'parts' (Коллекции) ---
+                // --- Фильтрация массива 'parts' (Коллекции) ---
                 if (Array.isArray(event.data.parts)) {
                     event.data.parts = postFilters.apply(event.data.parts);
+
+                    // --- КРИТИЧЕСКОЕ ИЗМЕНЕНИЕ: Скрываем коллекцию, если осталась одна карточка ---
+                    if (event.data.parts.length === 1) {
+                         event.data.parts = []; // Обнуляем массив, чтобы коллекция не отображалась
+                    }
                 }
                 
                 // Фильтрация массивов 'cast'

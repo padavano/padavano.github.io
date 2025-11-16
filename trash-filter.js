@@ -5,7 +5,9 @@
     // I. ОБЪЯВЛЕНИЕ ПЕРЕМЕННЫХ И REGEX
     // =========================================================================
 
+    // Разрешены только кириллица, цифры, пробелы и основные знаки препинания
     var allowedTitleCharsRegex = /^[А-Яа-яЁё0-9\s.,'":!?-]+$/; 
+    // Обязательное условие: наличие хотя бы одного кириллического символа или цифры
     var requiredTitleCharsRegex = /[А-Яа-яЁё0-9]/; 
     
     // =========================================================================
@@ -47,7 +49,7 @@
                     if (!item) return true;
                     
                     // --- Идентификация объекта "Персона" ---
-                    // Пропускаем фильтрацию контента для персон, чтобы отображались актеры/режиссеры.
+                    // Пропускаем фильтрацию контента для персон.
                     var isPersonObject = (
                         item.name && 
                         !item.title && 
@@ -76,10 +78,13 @@
                     
                     // 3. Условие "Белого списка": Строгая чистота заголовка (кириллица/цифры).
                     var isTitlePureCyrillicOrNumber = false;
+                    
+                    // --- ИСПРАВЛЕНИЕ: Используем 'name' если 'title' отсутствует (для TV) ---
+                    var titleToCheck = item.title || item.name;
 
-                    if (item.title) {
-                        var containsOnlyAllowedChars = allowedTitleCharsRegex.test(item.title);
-                        var containsRequiredChars = requiredTitleCharsRegex.test(item.title);
+                    if (titleToCheck) {
+                        var containsOnlyAllowedChars = allowedTitleCharsRegex.test(titleToCheck);
+                        var containsRequiredChars = requiredTitleCharsRegex.test(titleToCheck);
                         
                         isTitlePureCyrillicOrNumber = containsOnlyAllowedChars && containsRequiredChars;
                     }
@@ -230,9 +235,9 @@
                 if (Array.isArray(event.data.parts)) {
                     event.data.parts = postFilters.apply(event.data.parts);
 
-                    // --- КРИТИЧЕСКОЕ ИЗМЕНЕНИЕ: Скрываем коллекцию, если осталась одна карточка ---
+                    // Скрываем коллекцию, если после фильтрации осталась одна карточка
                     if (event.data.parts.length === 1) {
-                         event.data.parts = []; // Обнуляем массив, чтобы коллекция не отображалась
+                         event.data.parts = []; 
                     }
                 }
                 

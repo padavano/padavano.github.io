@@ -104,6 +104,12 @@
 
     // Используется для показа кнопки "Ещё" (должно быть только на первой странице)
     function hasMorePage(data) {
+        // ИСПРАВЛЕНИЕ: Исключаем LNUM URL из этой логики,
+        // чтобы не блокировать подгрузку следующих страниц Lampa.
+        if (data.url && data.url.indexOf('levende-develop.workers.dev') > -1) {
+            return false;
+        }
+
         return !!data
             && Array.isArray(data.results)
             && data.original_length !== data.results.length
@@ -123,7 +129,7 @@
 
         window.trash_filter_plugin = true;
 
-        // 1. Добавляет кнопку "Ещё" (использует hasMorePage, включая проверку page === 1).
+        // 1. Добавляет кнопку "Ещё".
         Lampa.Listener.follow('line', function (event) {
             if (event.type !== 'visible' || !hasMorePage(event.data)) {
                 return;
@@ -156,8 +162,6 @@
         
         // 2. Управляет навигацией при скролле.
         Lampa.Listener.follow('line', function (event) {
-            // Условие изменено: проверяем, что это событие добавления И что фильтрация удалила элементы.
-            // Проверку data.page === 1 мы убрали.
             if (event.type !== 'append' || event.data.original_length === event.data.results.length) {
                 return;
             }

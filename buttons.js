@@ -1,53 +1,50 @@
 Lampa.Platform.tv();
 
 (function () {
-    // Получение основных классов Lampa. Они должны быть доступны, но
-    // мы их не трогаем, чтобы не нарушать структуру.
-    let Component = Lampa.Component;
-    let Controller = Lampa.Controller;
-    let Utils = Lampa.Utils;
-    
-    // Params должен быть объявлен здесь, но инициализирован позже
+    // Params объявляется, но не инициализируется, чтобы избежать ошибки reading 'field' до onStart.
     let Params = null;
 
-    // Сортировка кнопок (не зависит от Lampa.Plugin)
-    Lampa.Listener.follow('controller', function (e) {
-        if (e.type == 'look_make_buttons') {
-            let buttons = e.data.buttons;
+    // Регистрация слушателя: прямое обращение к Lampa.Listener.
+    if (Lampa.Listener && typeof Lampa.Listener.follow === 'function') {
+        Lampa.Listener.follow('controller', function (e) {
+            if (e.type === 'look_make_buttons' && e.data && e.data.buttons) {
+                let buttons = e.data.buttons;
 
-            let online = [];
-            let torrent = [];
-            let trailer = [];
-            let other = [];
+                let online = [];
+                let torrent = [];
+                let trailer = [];
+                let other = [];
 
-            for (let i = 0; i < buttons.length; i++) {
-                let btn = buttons[i];
-                let name = (btn.name || '').toLowerCase();
+                for (let i = 0; i < buttons.length; i++) {
+                    let btn = buttons[i];
+                    let name = (btn.name || '').toLowerCase();
 
-                if (name.indexOf('online') > -1 || name.indexOf('playlist') > -1) {
-                    online.push(btn);
-                } else if (name.indexOf('torrent') > -1) {
-                    torrent.push(btn);
-                } else if (name.indexOf('trailer') > -1) {
-                    trailer.push(btn);
-                } else {
-                    other.push(btn);
+                    if (name.indexOf('online') > -1 || name.indexOf('playlist') > -1) {
+                        online.push(btn);
+                    } else if (name.indexOf('torrent') > -1) {
+                        torrent.push(btn);
+                    } else if (name.indexOf('trailer') > -1) {
+                        trailer.push(btn);
+                    } else {
+                        other.push(btn);
+                    }
                 }
+
+                e.data.buttons = [].concat(online, torrent, trailer, other);
             }
+        });
+    }
 
-            e.data.buttons = [].concat(online, torrent, trailer, other);
-        }
-    });
-
-    // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Оборачиваем регистрацию плагина в проверку.
-    if (Lampa.Plugin && typeof Lampa.Plugin.create === 'function') {
+    // Регистрация плагина: прямое обращение к Lampa.Plugin и Lampa.Component.
+    if (Lampa.Plugin && Lampa.Component && typeof Lampa.Plugin.create === 'function') {
         Lampa.Plugin.create({
             title: 'Sort buttons',
             id: 'sort_buttons',
-            component: Component.Button,
+            // Используем Lampa.Component напрямую.
+            component: Lampa.Component.Button, 
             
+            // onStart гарантирует, что Storage доступен для инициализации Params.
             onStart: function () {
-                // Инициализация Params, когда Storage гарантированно доступен.
                 if (Lampa.Storage) {
                     Params = Lampa.Storage.field('full_btn_priority', '');
                     Params.value = '';

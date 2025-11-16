@@ -5,21 +5,29 @@
     // I. ОБЪЯВЛЕНИЕ ПЕРЕМЕННЫХ И REGEX
     // =========================================================================
 
+    // Регулярное выражение для проверки, что заголовок состоит ТОЛЬКО из кириллицы,
+    // цифр, пробелов и основных знаков пунктуации.
     var allowedTitleCharsRegex = /^[А-Яа-яЁё0-9\s.,'":!?-]+$/; 
+    
+    // Регулярное выражение для проверки, что заголовок содержит ХОТЯ БЫ один
+    // символ кириллицы или цифру (для отсева пустых или чисто символьных заголовков).
     var requiredTitleCharsRegex = /[А-Яа-яЁё0-9]/; 
     
     // =========================================================================
-    // II. ФИЛЬТРЫ ЗАПРОСОВ (Pre-Filters)
+    // II. ФИЛЬТРЫ ЗАПРОСОВ (Pre-Filters) - Изменяют URL запроса
     // =========================================================================
     var preFilters = {
         filters: [
+            // Фильтр 1: Устанавливает минимальное количество голосов (Vote Count >= 1)
             function(baseUrl) {
                 baseUrl += '&vote_count.gte=' + 1;
                 return baseUrl;
             },
+            
+            // Фильтр 2: Исключает фильмы по определенным ID ключевых слов
             function(baseUrl) {
                 var baseExcludedKeywords = [
-                    '346488',
+                    '346488', // Мусорные/низкокачественные теги
                     '158718',
                     '41278'
                 ];
@@ -38,7 +46,7 @@
     };
 
     // =========================================================================
-    // III. ФИЛЬТРЫ РЕЗУЛЬТАТОВ (Post-Filters)
+    // III. ФИЛЬТРЫ РЕЗУЛЬТАТОВ (Post-Filters) - Изменяют массив данных
     // =========================================================================
     var postFilters = {
         filters: [
@@ -46,30 +54,31 @@
                 return results.filter(function(item) {
                     if (!item) return true;
                     
-                    // 1. Проверка на наличие постера (базовая фильтрация мусора).
+                    // 1. Обязательная проверка 1: Наличие постера. Быстро отсеивает "пустышки".
                     if (!item.poster_path) {
                         return false;
                     }
 
-                    // 2. Проверка на наличие даты релиза.
+                    // 2. Обязательная проверка 2: Наличие даты релиза.
                     if (!item.release_date && !item.first_air_date) {
                         return false;
                     }
                     
-                    // 3. Условие: Оригинальный язык - Русский
+                    // 3. Условие "Белого списка": Оригинальный язык - Русский.
                     var isRussian = (item.original_language && item.original_language.toLowerCase() === 'ru');
                     
-                    // 4. Условие: Title соответствует строгому белому списку
+                    // 4. Условие "Белого списка": Строгая кириллическая/цифровая чистота заголовка.
                     var isTitlePureCyrillicOrNumber = false;
 
                     if (item.title) {
                         var containsOnlyAllowedChars = allowedTitleCharsRegex.test(item.title);
                         var containsRequiredChars = requiredTitleCharsRegex.test(item.title);
                         
+                        // Заголовок чист, если содержит ТОЛЬКО разрешенные символы И хотя бы один нужный символ.
                         isTitlePureCyrillicOrNumber = containsOnlyAllowedChars && containsRequiredChars;
                     }
                     
-                    // Белый список: Оставляем, если выполнено (Условие 3 ИЛИ Условие 4)
+                    // Финальное решение: Оставляем, если выполнено (Условие 3 ИЛИ Условие 4).
                     var keepItem = isRussian || isTitlePureCyrillicOrNumber;
 
                     return keepItem;
@@ -89,11 +98,16 @@
     // IV. УТИЛИТЫ И ПРОВЕРКИ
     // =========================================================================
 
-    // Проверяет, является ли URL запросом к LNUM.
+    // Проверяет, является ли URL запросом к LNUM (по домену).
     function isLnumUrl(data) {
-        // Проверяет, является ли data объектом, а не URL. Для hasMorePage и request_secuses.
         var url = data && data.url ? data.url : data;
         return typeof url === 'string' && url.indexOf('levende-develop.workers.dev') > -1;
+    }
+
+    // ОПТИМИЗАЦИЯ: Проверяет, является ли запрос LNUM списком категорий/линий (содержит '/list').
+    // Такие запросы НЕЛЬЗЯ фильтровать, иначе ломается пагинация главной страницы LNUM.
+    function isLnumCategoryList(url) {
+        return isLnumUrl(url) && url.indexOf('/list') > -1;
     }
 
     // Проверяет, применим ли фильтр к данному URL (TMDB ИЛИ LNUM).
@@ -109,9 +123,9 @@
         return isTmdbApi || isLnumApi;
     }
 
-    // Используется для показа кнопки "Ещё" (должно быть только на первой странице)
+    // Логика для показа кнопки "Ещё" (применяется, когда фильтрация сократила список).
     function hasMorePage(data) {
-        // Логика для LNUM: активируем ручную кнопку "Ещё", если произошла фильтрация на первой странице.
+        // Для LNUM: активируем ручную кнопку "Ещё", если произошла фильтрация на первой странице.
         if (isLnumUrl(data)) {
              return !!data
                 && Array.isArray(data.results)
@@ -119,7 +133,7 @@
                 && data.page === 1;
         }
 
-        // Логика для TMDB
+        // Логика для TMDB: также учитывает total_pages.
         return !!data
             && Array.isArray(data.results)
             && data.original_length !== data.results.length
@@ -139,7 +153,7 @@
 
         window.trash_filter_plugin = true;
 
-        // 1. Добавляет кнопку "Ещё".
+        // 1. Добавляет кнопку "Ещё" при необходимости.
         Lampa.Listener.follow('line', function (event) {
             if (event.type !== 'visible' || !hasMorePage(event.data)) {
                 return;
@@ -170,7 +184,7 @@
             lineHeader$.append(button);
         });
         
-        // 2. Управляет навигацией при скролле (Только если произошла фильтрация).
+        // 2. Принудительно вызывает следующую страницу при скролле, если фильтрация сократила список.
         Lampa.Listener.follow('line', function (event) {
             if (event.type !== 'append' || event.data.original_length === event.data.results.length) {
                 return;
@@ -181,39 +195,44 @@
             }
         });
 
-        // 3. Применяет Pre-Filters.
+        // 3. Применяет Pre-Filters (изменяет URL перед отправкой запроса).
         Lampa.Listener.follow('before_send', function (event) {
             if (isFilterApplicable(event.url)) {
+                
+                // ИСКЛЮЧЕНИЕ: Не применяем pre-фильтры к запросам LNUM, которые возвращают список категорий/линий.
+                if (isLnumCategoryList(event.url)) {
+                    return;
+                }
+                
                 event.url = preFilters.apply(event.url);
             }
         });
 
-        // 4. Применяет Post-Filters.
+        // 4. Применяет Post-Filters (фильтрует полученные данные).
         Lampa.Listener.follow('request_secuses', function (event) {
             if (isFilterApplicable(event.params.url) && event.data) {
                 
-                // Проверяем, является ли это LNUM-запросом, который возвращает список самих категорий/линий.
-                // Это URL, который содержит '/list' и возвращает массивы объектов-коллекций.
-                var isLnumCategoryList = isLnumUrl(event.params.url) && event.params.url.indexOf('/list') > -1;
+                // Определяем, является ли это список категорий LNUM (требует пропуска фильтрации).
+                var isCategoryList = isLnumCategoryList(event.params.url);
 
-                // Обработка стандартных массивов TMDB и LNUM
+                // Обработка стандартных массивов TMDB и LNUM (results)
                 if (Array.isArray(event.data.results)) {
                     
                     event.data.original_length = event.data.results.length;
                     
-                    // КРИТИЧЕСКОЕ ИЗМЕНЕНИЕ: Не применяем фильтр, если это список категорий LNUM,
+                    // КРИТИЧЕСКОЕ ИЗМЕНЕНИЕ: Не фильтруем, если это список категорий LNUM,
                     // чтобы не нарушать пагинацию главной страницы.
-                    if (!isLnumCategoryList) {
+                    if (!isCategoryList) {
                         event.data.results = postFilters.apply(event.data.results);
                     }
                 }
                 
-                // Обработка массива 'cast' (для combined_credits) - всегда фильтруем
+                // Обработка массива 'cast' (актеры) - всегда фильтруем
                 if (Array.isArray(event.data.cast)) {
                     event.data.cast = postFilters.apply(event.data.cast);
                 }
                 
-                // Обработка массива 'crew' (для combined_credits) - всегда фильтруем
+                // Обработка массива 'crew' (съемочная группа) - всегда фильтруем
                 if (Array.isArray(event.data.crew)) {
                     event.data.crew = postFilters.apply(event.data.crew);
                 }

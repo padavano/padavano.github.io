@@ -1,12 +1,8 @@
-// Версия 1.06
+// Версия 1.07
 // Ссылка на плагин: https://padavano.github.io/quality.js
-// [ИЗМЕНЕНИЯ v1.06]
-// 1. [КОСМЕТИКА] Добавлена цветовая кодировка качества (Зеленый/Желтый/Красный).
-//    - Мини-карты: меняется цвет текста.
-//    - Полные карты: меняется цвет фона плашки.
-// 2. [ЛОГИКА] Улучшен алгоритм поиска названий.
-//    - Учитываются альтернативные названия из поля 'names'.
-//    - Фильтр: только кириллица, исключая специфические украинские символы (і, ї, є, ґ).
+// [ИЗМЕНЕНИЯ v1.07]
+// 1. [ЛОГИКА] Если в объекте карточки нет массива 'names' (TMDB), плагин делает доп. запрос к CUB (tmdb.cub.rip).
+// 2. [СТИЛИ] Добавлен border-radius: 0 для облегчённой темы (body.light--version).
 
 (function() {
     'use strict';
@@ -29,6 +25,7 @@
         PROXY_TIMEOUT_MS: 5000,
         SHOW_QUALITY_FOR_TV_SERIES: true,
         
+        // --- Цвета (Полная карта) ---
         FULL_CARD_LABEL_TEXT_COLOR: '#000',
         FULL_CARD_LABEL_BACKGROUND_COLOR: '#FFF',
         FULL_CARD_LABEL_FONT_WEIGHT: 'normal',
@@ -41,6 +38,7 @@
         FULL_CARD_BG_MID: '#FFF9C4',
         FULL_CARD_BG_LOW: '#FFCDD2',
 
+        // --- Цвета (Мини карта) ---
         LIST_CARD_LABEL_BORDER_COLOR: '#FFFF00',
         LIST_CARD_LABEL_BACKGROUND_COLOR: 'rgba(0, 0, 0, 0.7)',
         LIST_CARD_LABEL_TEXT_COLOR: '#FFF',
@@ -58,8 +56,7 @@
     var LQE_QUALITY_NO_INFO_LABEL = 'N/A';
     var LQE_QUALITY_BAD_LABEL = 'BAD';
 
-    // --- МОДУЛЬ КЭША ---
-
+    // --- КЭШ ---
     var LQE_CACHE_DEFAULT_TTL = LQE_CONFIG.CACHE_VALID_TIME_MS || (72 * 60 * 60 * 1000);
     var LQE_CACHE_DEFAULT_LIMIT = 100 * 1024;
     var lqeQualityCacheStore = null;
@@ -158,7 +155,6 @@
     }
     
     // --- ОЧЕРЕДЬ ---
-
     var lqeRequestQueue = [];
     var lqeActiveRequests = 0;
     var lqeMaxConcurrentRequests = 3;
@@ -190,7 +186,6 @@
     }
 
     // --- VISIBILITY ---
-
     var lqeCardVisibilityManager = (function() {
         var pendingCards = new Set();
         var frameId = null;
@@ -261,8 +256,7 @@
         };
     })();
 
-    // --- ЛОГИКА И ПАРСИНГ ---
-
+    // --- ЛОГИКА ---
     var QUALITY_DISPLAY_MAP = {
         "4K Web-DL 10bit HDR P81 HEVC": "4K", "UHD Blu-ray disc 2160p": "4K", "Hybrid (2160p)": "4K",
         "4K Web-DL": "4K", "bluray": "4K", "bdremux": "4K", "webdl": "1080", "web-dl": "1080", "webrip": "1080",
@@ -399,7 +393,6 @@
     }
 
     // --- СЕТЬ И API ---
-
     function fetchWithProxy(url, cardId, callback) {
         var currentProxyIndex = -1;
         var callbackCalled = false;
@@ -458,11 +451,18 @@
         }
         var tmdbYear = (dateStr.length >= 4) ? dateStr.substring(0, 4) : '';
 
+        // Подготовка массива названий
         var validLocalTitles = [];
         var cleanedOriginalTitleMain = lqeCleanTitleForComparison(normalizedCard.original_title);
-        
         var hasRussianChar = /[а-яё]/i;
         var hasUkrainianChar = /[ґєії]/i;
+
+        function addTitleToValidList(name) {
+            var cn = lqeCleanTitleForComparison(name);
+            if (cn && cn !== cleanedOriginalTitleMain && validLocalTitles.indexOf(cn) === -1 && hasRussianChar.test(name) && !hasUkrainianChar.test(name)) {
+                validLocalTitles.push(cn);
+            }
+        }
 
         if (normalizedCard.title) {
             var cl = lqeCleanTitleForComparison(normalizedCard.title);
@@ -470,15 +470,50 @@
         }
 
         if (Array.isArray(normalizedCard.names)) {
-            normalizedCard.names.forEach(function(name) {
-                var cn = lqeCleanTitleForComparison(name);
-                if (cn && cn !== cleanedOriginalTitleMain && validLocalTitles.indexOf(cn) === -1 && hasRussianChar.test(name) && !hasUkrainianChar.test(name)) {
-                    validLocalTitles.push(cn);
-                }
-            });
+            normalizedCard.names.forEach(addTitleToValidList);
         }
-        
-        if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "card: " + cardId + ", Valid local titles for search:", validLocalTitles);
+
+        // [v1.07] Глубокое сканирование TMDB, если нет names
+        function ensureNamesAndSearch() {
+            if (validLocalTitles.length <= 1 && (!normalizedCard.names || normalizedCard.names.length === 0)) {
+                var type = isTvSeries ? 'tv' : 'movie';
+                var tmdbUrl = 'https://tmdb.cub.rip/3/' + type + '/' + cardId + '?api_key=4ef0d7355d9ffb5151e987764708ce96&language=ru';
+                
+                if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "card: " + cardId + ", Names missing. Fetching deep details: " + tmdbUrl);
+
+                fetchWithProxy(tmdbUrl, cardId, function(err, data) {
+                    if (!err && data) {
+                        try {
+                            var tmdbData = JSON.parse(data);
+                            // Проверяем кастомное свойство 'names'
+                            if (Array.isArray(tmdbData.names)) {
+                                if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "card: " + cardId + ", Found custom 'names' property. Count: " + tmdbData.names.length);
+                                tmdbData.names.forEach(addTitleToValidList);
+                            }
+                            // На всякий случай проверяем и alternative_titles
+                            else if (tmdbData.alternative_titles && (tmdbData.alternative_titles.titles || tmdbData.alternative_titles.results)) {
+                                var titles = tmdbData.alternative_titles.titles || tmdbData.alternative_titles.results || [];
+                                if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "card: " + cardId + ", Found 'alternative_titles'. Count: " + titles.length);
+                                titles.forEach(function(t) {
+                                    if (t.title) addTitleToValidList(t.title);
+                                });
+                            }
+                        } catch (parseErr) {
+                            console.error("LQE-LOG", "TMDB parse error:", parseErr);
+                        }
+                    }
+                    startStrategies();
+                });
+            } else {
+                startStrategies();
+            }
+        }
+
+        function startStrategies() {
+            if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "card: " + cardId + ", Final valid local titles for search:", validLocalTitles);
+            if (searchStrategies.length > 0) executeNextStrategy(0);
+            else callback(null);
+        }
 
         function searchJacredApi(searchTitle, searchYear, exactMatch, strategyName, expectedLocalTitle, expectedOriginalTitle, tmdbSearchYear, isTvSeries, apiCallback) {
             var userId = Lampa.Storage.get('lampac_unic_id', '');
@@ -609,12 +644,10 @@
             });
         }
 
-        if (searchStrategies.length > 0) executeNextStrategy(0);
-        else callback(null);
+        ensureNamesAndSearch();
     }
 
-    // --- UI И РЕНДЕРИНГ ---
-
+    // --- UI ---
     var styleLQE = "<style id=\"lampa_quality_styles\">" +
     ".full-start-new__rate-line { flex-wrap: wrap; gap: 0.4em 0; }" +
     ".full-start-new__rate-line > * { margin-right: 0.4em !important; flex-shrink: 0; flex-grow: 0; }" +
@@ -627,6 +660,7 @@
     ".card__quality, .card__vote { padding: 0.4em 0.6em; font-size: " + LQE_CONFIG.LIST_CARD_LABEL_FONT_SIZE + "; font-weight: " + LQE_CONFIG.LIST_CARD_LABEL_FONT_WEIGHT + "; color: " + LQE_CONFIG.LIST_CARD_LABEL_TEXT_COLOR + "; white-space: nowrap; text-shadow: 0.5px 0.5px 1px rgba(0,0,0,0.3) !important; }" +
     ".card__icons { top: 0.3em; left: unset; right: 0.3em; }" +    
     ".card__quality { position: absolute !important; bottom: unset; top: 0.3em; left: 0.3em; z-index: 1; width: fit-content; max-width: calc(100% - 1em); overflow: hidden; text-transform: uppercase; }" +
+    "body.light--version .card__icons-inner { -webkit-border-radius: 0; -moz-border-radius: 0; border-radius: 0; }" +
     "</style>";
     Lampa.Template.add('lampa_quality_css', styleLQE);
     $('body').append(Lampa.Template.get('lampa_quality_css', {}, true));
@@ -845,8 +879,6 @@
         }
     }
 
-    // --- ИНИЦИАЛИЗАЦИЯ ---
-
     var observer = new MutationObserver(function(mutations) {
         var newCards = [];
         for (var m = 0; m < mutations.length; m++) {
@@ -877,7 +909,7 @@
     });
 
     function initializeLampaQualityPlugin() {
-        if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "Lampa Quality Enhancer: Plugin Initialization Started! (v1.06)");
+        if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "Lampa Quality Enhancer: Plugin Initialization Started! (v1.07)");
         window.lampaQualityPlugin = true;
         observer.observe(document.body, { childList: true, subtree: true });
         Lampa.Listener.follow('full', function(event) {

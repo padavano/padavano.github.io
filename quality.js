@@ -1,9 +1,8 @@
-// Версия 1.08
+// Версия 1.09
 // Ссылка на плагин: https://padavano.github.io/quality.js
-// [ИЗМЕНЕНИЯ v1.08]
-// 1. [МОДЕРНИЗАЦИЯ] Обновление синтаксиса: замена 'var' на 'const/let' и использование стрелочных функций (ES6+).
-// 2. [СИНТАКСИС] Использование шаблонных литералов (`...`) для стилей и строк.
-// 3. [ЛОГИКА] Упрощение асинхронного кода: функции `fetchWithProxy` и `getBestReleaseFromJacred` переписаны с использованием `async/await`.
+// [ИЗМЕНЕНИЯ v1.09]
+// 1. [КРИТИЧЕСКИЙ ФИКС] Рефакторинг lqeProcessQueue: изменен способ вызова async-функции внутри setTimeout для повышения устойчивости в нестандартных средах (Lampa/Tizen).
+// 2. [ЛОГИРОВАНИЕ] Добавлено больше явных логов для отслеживания работы MutationObserver, IntersectionObserver и очереди запросов.
 
 (function() {
     'use strict';
@@ -82,7 +81,6 @@
     ];
 
     // --- DOM СТИЛИ (использование шаблонных литералов) ---
-
     // Стили для всех элементов
     const styleLQE = `<style id="lampa_quality_styles">
         /* Стили для полной карточки */
@@ -102,7 +100,7 @@
             cursor: help;
         }
 
-        /* Убрать border-radius для светлой темы, если это требуется (v1.07) */
+        /* Убрать border-radius для светлой темы */
         body.light--version .full-start-new__rate-line .lqe-full-card-quality {
             border-radius: 0;
         }
@@ -162,28 +160,24 @@
     // --- УТИЛИТЫ ---
 
     /**
-     * Клонирует объект, используя оператор расширения.
+     * Клонирует объект.
      * @param {object} source - Исходный объект.
      * @returns {object} Клон объекта.
      */
-    const lqeCloneCacheObject = (source) => {
-        // Используем оператор расширения для более чистого клонирования
-        return { ...source };
-    };
+    const lqeCloneCacheObject = (source) => ({ ...source });
 
     /**
-     * Очищает заголовок для сравнения (удаление пунктуации, приведение к нижнему регистру).
+     * Очищает заголовок для сравнения.
      * @param {string} title - Исходный заголовок.
      * @returns {string} Очищенный заголовок.
      */
     const lqeCleanTitleForComparison = (title) => {
         if (!title) return '';
-        // Цепочка методов для чистоты кода
         const cleaned = title
             .toLowerCase()
-            .replace(/щ/g, 'ш').replace(/ё/g, 'е') // Замена специфичных русских букв
-            .replace(/[^a-zа-я0-9\s]/g, ' ') // Удаление всей пунктуации
-            .replace(/\s+/g, ' ') // Замена множественных пробелов на одинарный
+            .replace(/щ/g, 'ш').replace(/ё/g, 'е')
+            .replace(/[^a-zа-я0-9\s]/g, ' ')
+            .replace(/\s+/g, ' ')
             .trim();
         return cleaned;
     };
@@ -196,8 +190,6 @@
     const lqeCheckIsLowQuality = (title) => {
         if (!title) return false;
         const normalizedTitle = title.toLowerCase();
-
-        // Проверяем каждое ключевое слово-паттерн
         for (const regex of LQE_LOW_QUALITY_KEYWORDS) {
             if (regex.test(normalizedTitle)) {
                 return true;
@@ -209,14 +201,13 @@
     // --- КЭШИРОВАНИЕ ---
 
     /**
-     * Сохраняет кэш в хранилище Lampa с задержкой, чтобы не блокировать UI.
+     * Сохраняет кэш в хранилище Lampa с задержкой.
      */
     const saveLqeCache = () => {
         if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "Cache: Scheduling save to Lampa.Storage.");
-        // Используем setTimeout, чтобы не блокировать основной поток
         setTimeout(() => {
             try {
-                LQE_CACHE.prune(); // Очистка перед сохранением
+                LQE_CACHE.prune();
                 Lampa.Storage.set(LQE_CONFIG.CACHE_KEY, JSON.stringify(LQE_CACHE));
                 if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "Cache: Successfully saved to Lampa.Storage.");
             } catch (e) {
@@ -244,15 +235,11 @@
             LQE_CACHE = {};
         }
 
-        /**
-         * Метод для очистки кэша: удаляет просроченные записи и старые записи, если превышен лимит.
-         */
         LQE_CACHE.prune = () => {
             const now = Date.now();
             let keysToDelete = [];
             let cacheSize = 0;
 
-            // 1. Находим просроченные записи
             for (const key in LQE_CACHE) {
                 if (key === 'version' || typeof LQE_CACHE[key].timestamp !== 'number') continue;
 
@@ -262,13 +249,11 @@
                 }
             }
 
-            // 2. Удаляем просроченные
             if (keysToDelete.length > 0 && LQE_CONFIG.LOGGING_GENERAL) {
                 console.log("LQE-LOG", `Cache: Pruning ${keysToDelete.length} expired items.`);
                 keysToDelete.forEach(key => delete LQE_CACHE[key]);
             }
 
-            // 3. Если кэш всё ещё слишком большой (условно, более 1000 записей), удаляем самые старые
             if (cacheSize > 1000) {
                 if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "Cache: Size exceeded 1000. Pruning oldest items.");
                 const sortedKeys = Object.keys(LQE_CACHE)
@@ -286,14 +271,12 @@
         };
 
         LQE_IS_CACHED_READY = true;
-        LQE_CACHE.prune(); // Первичная очистка
+        LQE_CACHE.prune();
         if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "Cache: Initialization complete. Size:", Object.keys(LQE_CACHE).length - 1);
     };
 
     /**
      * Получает данные из кэша.
-     * @param {string} key - Ключ кэша.
-     * @returns {{quality_code: number, full_label: string} | null} Данные кэша или null.
      */
     const getLqeCache = (key) => {
         if (!LQE_IS_CACHED_READY || !LQE_CACHE[key]) return null;
@@ -301,13 +284,11 @@
         const now = Date.now();
         const item = LQE_CACHE[key];
 
-        // Кэш действителен
         if (now - item.timestamp < LQE_CONFIG.CACHE_VALID_TIME_MS) {
             if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", `Cache check for ${key}: HIT`);
-            // Если кэш подходит к порогу обновления, ставим его в очередь
             if (now - item.timestamp > LQE_CONFIG.CACHE_REFRESH_THRESHOLD_MS) {
                 if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", `Cache check for ${key}: REFRESH NEEDED`);
-                return lqeCloneCacheObject(item); // Возвращаем старые данные, но ставим в очередь на обновление
+                return lqeCloneCacheObject(item);
             }
             return lqeCloneCacheObject(item);
         }
@@ -319,8 +300,6 @@
 
     /**
      * Сохраняет данные в кэш.
-     * @param {string} key - Ключ кэша.
-     * @param {object} data - Данные для сохранения.
      */
     const setLqeCache = (key, data) => {
         if (!LQE_IS_CACHED_READY) return;
@@ -339,9 +318,6 @@
 
     /**
      * Выполняет запрос с использованием списка прокси, перебирая их до успеха.
-     * Переписано на async/await.
-     * @param {string} url - URL для запроса.
-     * @returns {Promise<Response>} Promise с успешным Response.
      */
     const fetchWithProxy = async (url) => {
         const directUrl = url;
@@ -378,13 +354,8 @@
 
     /**
      * Добавляет задачу в очередь на обработку качества.
-     * @param {string} key - Ключ кэша.
-     * @param {object} data - Данные для функции обработки.
-     * @param {Function} processor - Асинхронная функция-обработчик.
-     * @param {Function} [onDone] - Колбэк после завершения.
      */
     const lqeAddToQueue = (key, data, processor, onDone) => {
-        // Проверяем, не стоит ли уже эта задача в очереди
         if (lqeRequestQueue.find(item => item.key === key)) {
             if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", `Queue: Task with key ${key} is already waiting.`);
             return;
@@ -396,8 +367,7 @@
     };
 
     /**
-     * Обрабатывает очередь запросов.
-     * Использует setTimeout для неблокирующего выполнения.
+     * Обрабатывает очередь запросов. КРИТИЧЕСКИЙ ФИКС: Изменение структуры setTimeout.
      */
     const lqeProcessQueue = () => {
         if (lqeRequestQueueRunning) return;
@@ -408,19 +378,23 @@
 
         lqeRequestQueueRunning = true;
         const task = lqeRequestQueue.shift();
+        if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", `Queue: Starting process for task ${task.key} on timer.`);
 
-        // Неблокирующее выполнение задачи
-        lqeQueueTimer = setTimeout(async () => {
-            try {
-                if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", `Queue: Processing task ${task.key}...`);
-                await task.processor(task.data);
-                if (task.onDone) task.onDone();
-            } catch (e) {
-                console.error("LQE-ERROR", `Queue: Task ${task.key} failed.`, e);
-            } finally {
-                lqeRequestQueueRunning = false;
-                lqeProcessQueue(); // Запускаем следующую задачу
-            }
+        // Используем setTimeout с обычным колбэком, внутри которого вызываем async-функцию (IIFE),
+        // чтобы избежать проблем с асинхронностью в некоторых средах.
+        lqeQueueTimer = setTimeout(() => {
+            (async () => {
+                try {
+                    if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", `Queue: Executing task ${task.key}...`);
+                    await task.processor(task.data);
+                    if (task.onDone) task.onDone();
+                } catch (e) {
+                    console.error("LQE-ERROR", `Queue: Task ${task.key} failed.`, e);
+                } finally {
+                    lqeRequestQueueRunning = false;
+                    lqeProcessQueue(); // Запускаем следующую задачу
+                }
+            })();
         }, 10);
     };
 
@@ -428,9 +402,6 @@
 
     /**
      * Определяет метку качества и цвет на основе score и qualityCode.
-     * @param {number} score - Баллы JacRed.
-     * @param {number} qualityCode - Разрешение (2160, 1080 и т.д.).
-     * @returns {{label: string, color: string, bg: string}} Объект с меткой и цветами.
      */
     const translateQualityLabel = (score, qualityCode) => {
         const result = {
@@ -448,7 +419,7 @@
             result.label = LQE_CONFIG.QUALITY_LOW_LABEL;
         }
 
-        // Приоритет 2: Используем Score, если qualityCode не дал ясного ответа
+        // Приоритет 2: Используем Score
         if (score > QUALITY_MAX_SCORE_MAP['4K']) {
             result.label = LQE_CONFIG.QUALITY_HIGH_LABEL;
         } else if (score > QUALITY_MAX_SCORE_MAP['1080']) {
@@ -483,24 +454,12 @@
 
     /**
      * Асинхронно запрашивает качество с JacRed и TMDB/CUB.
-     * Переписано на async/await.
-     * @param {object} data - Данные фильма/сериала.
-     * @returns {Promise<{quality: number, full_label: string}>} Наилучшее качество.
      */
     const getBestReleaseFromJacred = async (data) => {
         let bestScore = -Infinity;
         let bestQuality = LQE_CONFIG.QUALITY_NO_INFO_LABEL;
         let bestLabel = '';
 
-        // 1. Формирование ключей для поиска
-        const searchTitles = [
-            lqeCleanTitleForComparison(data.title),
-            lqeCleanTitleForComparison(data.original_title)
-        ].filter(t => t);
-
-        if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", `card: ${data.id}, Valid local titles for search:`, searchTitles);
-
-        // 2. Стратегии поиска (OriginalTitle_Year)
         const jacredUrl = `${LQE_CONFIG.JACRED_PROTOCOL}${LQE_CONFIG.JACRED_URL}/api/v1.0/torrents`;
         const searchParams = new URLSearchParams({
             search: data.original_title,
@@ -521,7 +480,6 @@
             return { quality: -1, full_label: 'Error: JacRed fetch failed.' };
         }
 
-        // 3. Анализ торрентов
         if (jacredResult && jacredResult.torrents && jacredResult.torrents.length > 0) {
             for (const torrent of jacredResult.torrents) {
                 const score = torrent.score || 0;
@@ -529,7 +487,6 @@
                 const title = torrent.title || '';
 
                 if (score > 0 && score > bestScore) {
-                    // Проверяем на заведомо низкое качество, даже если score высокий (например, TS)
                     if (lqeCheckIsLowQuality(title)) {
                         if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", `card: ${data.id}, JacRed: Low quality keyword found in: ${title}. Score ignored.`);
                         continue;
@@ -541,7 +498,6 @@
 
                     if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", `card: ${data.id}, JacRed: New best score ${score} with quality ${qualityCode}p, torrent: ${title}`);
 
-                    // Оптимизация: если нашли 4K с максимальным скором, останавливаем поиск
                     if (bestQuality >= QUALITY_DISPLAY_MAP['4K'] && bestScore > QUALITY_MAX_SCORE_MAP['4K']) {
                         if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", `card: ${data.id}, Optimization: Found 4K PERFECT MATCH. Stopping search.`);
                         break;
@@ -555,7 +511,7 @@
             }
         }
 
-        // 4. Попытка получить дополнительную информацию о названии (если нет локальных имен)
+        // Попытка получить дополнительную информацию о названии
         if (data.names && data.names.length === 0) {
             if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", `card: ${data.id}, TMDB Names array is empty. Trying CUB API for more titles...`);
 
@@ -568,8 +524,6 @@
                     if (localTranslations.length > 0) {
                         const localTitle = localTranslations[0].data.title;
                         if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", `card: ${data.id}, CUB API found local title: ${localTitle}. Retrying search (not implemented yet).`);
-                        // Фактического повторного запроса здесь нет, только логгирование
-                        // Возвращаем результат без улучшения, т.к. поиск уже выполнен
                     }
                 }
             } catch (e) {
@@ -577,7 +531,6 @@
             }
         }
 
-        // 5. Ничего не найдено
         return { quality: -1, full_label: 'No valid torrent found.' };
     };
 
@@ -585,23 +538,16 @@
 
     /**
      * Обновляет метку качества на мини-карточке.
-     * @param {HTMLElement} cardElement - Элемент карточки.
-     * @param {string} displayQuality - Метка качества ('4K', '1080', '?').
-     * @param {string} color - Цвет текста.
-     * @param {boolean} isLowQuality - Признак низкого качества.
      */
     const updateCardListQualityElement = (cardElement, displayQuality, color, isLowQuality) => {
-        // Удаляем старые метки
         cardElement.querySelectorAll('.card__quality').forEach(el => el.remove());
 
-        // Создаем новый элемент для метки
         const qualityDiv = document.createElement('div');
         qualityDiv.className = 'card__quality';
         qualityDiv.style.color = color;
-        // Для низкого качества можно добавить инверсию или специальный фон
         if (isLowQuality) {
              qualityDiv.style.backgroundColor = LQE_CONFIG.FULL_CARD_BG_LOW;
-             qualityDiv.style.color = '#000000';
+             qualityDiv.style.color = LQE_CONFIG.FULL_CARD_LABEL_TEXT_COLOR;
              qualityDiv.style.border = '1px solid ' + color;
         }
 
@@ -609,7 +555,6 @@
         innerElement.textContent = displayQuality;
 
         qualityDiv.appendChild(innerElement);
-        // Вставляем элемент в карточку
         const cardView = cardElement.querySelector('.card__view');
         if (cardView) {
             cardView.appendChild(qualityDiv);
@@ -619,7 +564,6 @@
 
     /**
      * Обрабатывает логику для отображения качества на мини-карточках.
-     * @param {HTMLElement} cardElement - Элемент карточки.
      */
     const updateCardListQuality = (cardElement) => {
         const movieId = cardElement.getAttribute('data-id');
@@ -627,11 +571,19 @@
         const cardKey = `${movieType}_${movieId}`;
 
         if (!movieId || LQE_PROCESSED_LIST_CARD_IDS.has(cardKey)) {
-            // Уже обработано или нет ID
+            // Если уже есть в Set, значит, она либо в кэше, либо в очереди.
+            // Проверяем только кэш для обновления метки, если наблюдатель сработал повторно.
+            const cachedItem = getLqeCache(cardKey);
+            if (cachedItem) {
+                 const translated = translateQualityLabel(0, cachedItem.quality_code);
+                 const isLowQuality = translated.label === LQE_CONFIG.QUALITY_LOW_LABEL;
+                 updateCardListQualityElement(cardElement, translated.label, translated.color, isLowQuality);
+            }
             return;
         }
 
         LQE_PROCESSED_LIST_CARD_IDS.add(cardKey);
+        if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", `IO-Check: Card ${cardKey} is visible and starting processing.`);
 
         // 1. Проверка кэша
         const cachedItem = getLqeCache(cardKey);
@@ -640,8 +592,8 @@
             const isLowQuality = translated.label === LQE_CONFIG.QUALITY_LOW_LABEL;
             updateCardListQualityElement(cardElement, translated.label, translated.color, isLowQuality);
 
-            // Если кэш требует обновления, ставим в очередь (без блокировки UI)
             if (Date.now() - cachedItem.timestamp > LQE_CONFIG.CACHE_REFRESH_THRESHOLD_MS) {
+                if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", `IO-Check: Card ${cardKey} cache refreshing.`);
                 lqeAddToQueue(cardKey, { id: movieId, type: movieType }, processCardQualityAsync);
             }
             return;
@@ -659,21 +611,18 @@
 
         // 3. Добавляем задачу в очередь на полный расчет
         lqeAddToQueue(cardKey, { id: movieId, type: movieType }, processCardQualityAsync, () => {
-            // Удаляем анимацию после завершения
             loadingElement.remove();
         });
     };
 
     /**
      * Асинхронная функция для обработки качества и обновления UI списка.
-     * @param {object} data - Данные фильма/сериала.
      */
     const processCardQualityAsync = async (data) => {
         const movieId = data.id;
         const movieType = data.type;
         const cardKey = `${movieType}_${movieId}`;
 
-        // 1. Получение данных фильма
         const tmdbApi = LQE_CONFIG.JACRED_PROTOCOL + 'tmdb.cub.rip/3/';
         const url = `${tmdbApi}${movieType}/${movieId}`;
         let tmdbData;
@@ -682,7 +631,6 @@
             tmdbData = await response.json();
         } catch (e) {
             console.error("LQE-ERROR", `card: ${movieId}, Failed to fetch TMDB data.`, e.message);
-            // Если TMDB API упал, сохраняем "NO_INFO" в кэш
             setLqeCache(cardKey, { quality_code: -1, full_label: 'TMDB Error' });
             return;
         }
@@ -695,26 +643,21 @@
             release_date: tmdbData.release_date || tmdbData.first_air_date,
             names: tmdbData.names || []
         };
-        // Проверка для сериалов
+
         if (movieType === 'tv' && !LQE_CONFIG.SHOW_QUALITY_FOR_TV_SERIES) {
             setLqeCache(cardKey, { quality_code: -1, full_label: 'TV Series Skipped' });
             return;
         }
 
-        // 2. Получение лучшего релиза
         const bestRelease = await getBestReleaseFromJacred(normalizedData);
-
-        // 3. Сохранение в кэш
         setLqeCache(cardKey, { quality_code: bestRelease.quality, full_label: bestRelease.full_label });
 
-        // 4. Обновление UI для всех видимых карточек (так как onSnapshot не используется)
         const visibleCards = document.querySelectorAll(`.card[data-id="${movieId}"]`);
         const translated = translateQualityLabel(0, bestRelease.quality);
         const isLowQuality = translated.label === LQE_CONFIG.QUALITY_LOW_LABEL;
 
         visibleCards.forEach(card => {
             if (LQE_CONFIG.LOGGING_CARDLIST) console.log("LQE-LOG", `Card: ${movieId}, Updating visible list card with quality: ${translated.label}`);
-            // Удаляем анимацию, если она есть
             card.querySelectorAll('.lqe-loading').forEach(el => el.remove());
             updateCardListQualityElement(card, translated.label, translated.color, isLowQuality);
         });
@@ -722,8 +665,6 @@
 
     /**
      * Обрабатывает логику для отображения качества на полной карточке.
-     * @param {object} movieData - Данные фильма/сериала из Lampa.
-     * @param {HTMLElement} renderElement - Элемент рендера Lampa.
      */
     const processFullCardQuality = (movieData, renderElement) => {
         const movieId = movieData.id;
@@ -736,10 +677,8 @@
             return;
         }
 
-        // Удаляем старые метки и анимацию
         rateLine.querySelectorAll('.lqe-full-card-quality').forEach(el => el.remove());
 
-        // Проверка для сериалов
         if (movieType === 'tv' && !LQE_CONFIG.SHOW_QUALITY_FOR_TV_SERIES) {
             if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", `card: ${movieId}, TV Series skipped by config.`);
             return;
@@ -751,11 +690,9 @@
             const translated = translateQualityLabel(0, cachedItem.quality_code);
             addFullCardQualityElement(rateLine, translated);
 
-            // Если кэш требует обновления, ставим его в очередь
             if (Date.now() - cachedItem.timestamp > LQE_CONFIG.CACHE_REFRESH_THRESHOLD_MS) {
-                lqeAddToQueue(cardKey, movieData, processFullCardQualityAsync, () => {
-                    // Здесь не нужно ничего делать, так как UI обновляется внутри processFullCardQualityAsync
-                });
+                if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", `card: ${movieId}, Full card cache refreshing.`);
+                lqeAddToQueue(cardKey, movieData, processFullCardQualityAsync);
             }
             return;
         }
@@ -763,24 +700,20 @@
         // 2. Если нет в кэше, добавляем анимацию загрузки
         const loadingElement = document.createElement('div');
         loadingElement.className = 'lqe-full-card-quality lqe-loading';
-        loadingElement.textContent = LQE_CONFIG.QUALITY_MID_LABEL; // Заполнитель
+        loadingElement.textContent = LQE_CONFIG.QUALITY_MID_LABEL;
         rateLine.appendChild(loadingElement);
         if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", `card: ${movieId}, Add loading animation`);
 
         // 3. Добавляем задачу в очередь на полный расчет
         lqeAddToQueue(cardKey, movieData, processFullCardQualityAsync, () => {
-            // Удаляем анимацию после завершения
             loadingElement.remove();
         });
     };
 
     /**
      * Вспомогательная функция для добавления элемента качества на полную карточку.
-     * @param {HTMLElement} rateLine - Элемент, куда добавлять метку.
-     * @param {{label: string, color: string, bg: string}} translated - Результат translateQualityLabel.
      */
     const addFullCardQualityElement = (rateLine, translated) => {
-        // Удаляем старые метки
         rateLine.querySelectorAll('.lqe-full-card-quality').forEach(el => el.remove());
 
         const qualityElement = document.createElement('div');
@@ -794,7 +727,6 @@
 
     /**
      * Асинхронная функция для обработки качества и обновления UI полной карточки.
-     * @param {object} movieData - Данные фильма/сериала.
      */
     const processFullCardQualityAsync = async (movieData) => {
         const movieId = movieData.id;
@@ -811,14 +743,11 @@
         };
         if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", `card: ${movieId}, Normalized full card data:`, normalizedData);
 
-        // 1. Получение лучшего релиза
         const bestRelease = await getBestReleaseFromJacred(normalizedData);
         if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", `card: ${movieId}, JacRed callback received for full card. Result:`, bestRelease);
 
-        // 2. Сохранение в кэш
         setLqeCache(cardKey, { quality_code: bestRelease.quality, full_label: bestRelease.full_label });
 
-        // 3. Обновление UI
         const translated = translateQualityLabel(0, bestRelease.quality);
         const currentActivity = Lampa.Activity.active();
 
@@ -827,7 +756,6 @@
             const rateLine = renderElement.querySelector('.full-start-new__rate-line');
 
             if (rateLine) {
-                // Удаляем анимацию загрузки
                 rateLine.querySelectorAll('.lqe-loading').forEach(el => el.remove());
                 addFullCardQualityElement(rateLine, translated);
             }
@@ -838,7 +766,6 @@
 
     /**
      * Менеджер видимости для списка карточек, предотвращает утечки памяти.
-     * Используется Intersection Observer.
      */
     const lqeCardVisibilityManager = (() => {
         if (!('IntersectionObserver' in window)) {
@@ -855,18 +782,23 @@
                     const card = entry.target;
                     const cardKey = `${card.dataset.type}_${card.dataset.id}`;
 
-                    // Если карточка появляется в зоне видимости, и она еще не обработана в Set
-                    if (entry.isIntersecting && !LQE_PROCESSED_LIST_CARD_IDS.has(cardKey)) {
-                        // Важно: на этом этапе мы просто запускаем логику, которая проверит кэш
-                        updateCardListQuality(card);
+                    if (entry.isIntersecting) {
+                        // Карточка появилась в зоне видимости
+                        // Если она еще не обработана в Set, запускаем логику
+                        if (!LQE_PROCESSED_LIST_CARD_IDS.has(cardKey)) {
+                            updateCardListQuality(card);
+                        } else {
+                            if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", `IO-Check: Card ${cardKey} is visible, already processed.`);
+                            // Если уже обработана, просто обновляем метку из кэша, если она была скрыта, а потом снова появилась.
+                             updateCardListQuality(card);
+                        }
+                    } else {
+                        // Карточка вышла из зоны видимости
+                        // Мы не удаляем ее из Set, т.к. не хотим повторно ставить в очередь JacRed
                     }
-                    // Если карточка уходит из зоны видимости, снимаем наблюдение
-                    // NOTE: Снятие наблюдения здесь может быть излишним, т.к. IntersectionObserver
-                    // не удаляет сам элемент из DOM, но позволяет сократить количество активных наблюдателей.
-                    // observer.unobserve(card);
                 });
             },
-            { threshold: 0.1 } // Запускать, когда видно 10% элемента
+            { threshold: 0.1 }
         );
 
         return {
@@ -883,7 +815,7 @@
      * Основная функция инициализации плагина.
      */
     const initializeLampaQualityPlugin = () => {
-        if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "Lampa Quality Enhancer: Plugin Initialization Started! (v1.08)");
+        if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "Lampa Quality Enhancer: Plugin Initialization Started! (v1.09)");
         window.lampaQualityPlugin = true;
 
         // 1. Инициализация кэша
@@ -896,18 +828,17 @@
 
         // 3. Mutation Observer для отслеживания новых карточек в списках
         const observer = new MutationObserver((mutationsList, observer) => {
-            // Перебираем все изменения в DOM
             mutationsList.forEach(mutation => {
-                // Ищем добавленные узлы
                 if (mutation.addedNodes) {
                     mutation.addedNodes.forEach(node => {
-                        // Ищем .card элементы
+                        // Ищем .card элементы (когда добавляется одиночная карточка)
                         if (node.classList && node.classList.contains('card')) {
-                            // Если карточка добавлена, ставим её на наблюдение видимости
+                            if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", `Observer: Found single card ${node.dataset.id}. Observing.`);
                             lqeCardVisibilityManager.observe(node);
                         } else if (node.querySelectorAll) {
-                            // Ищем .card элементы внутри добавленного узла (например, если загрузился целый список)
+                            // Ищем .card элементы внутри добавленного узла (когда загружается целый список/ряд)
                             node.querySelectorAll('.card').forEach(card => {
+                                if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", `Observer: Found card batch ${card.dataset.id}. Observing.`);
                                 lqeCardVisibilityManager.observe(card);
                             });
                         }
@@ -917,7 +848,7 @@
         });
 
         observer.observe(document.body, { childList: true, subtree: true });
-        if (LQE_CONFIG.LOGGING_GENERAL) console.log('LQE-LOG: Initial observer for card lists started.');
+        if (LQE_CONFIG.LOGGING_GENERAL) console.log('LQE-LOG', 'Initial observer for card lists started.');
 
         // 4. Слушатель для полной карточки (при открытии)
         Lampa.Listener.follow('full', (event) => {
@@ -925,7 +856,12 @@
                 const renderElement = event.object.activity.render();
                 currentGlobalMovieId = event.data.movie.id;
                 if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "Full card event 'complite' for ID:", currentGlobalMovieId);
-                processFullCardQuality(event.data.movie, renderElement);
+                // Проверяем, что movieData существует
+                if (event.data.movie) {
+                    processFullCardQuality(event.data.movie, renderElement);
+                } else {
+                     console.error("LQE-ERROR", "Full card event missing movie data.");
+                }
             }
         });
 
@@ -942,7 +878,6 @@
     if (window.lampaQualityPlugin) {
         if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "Plugin already loaded. Skipping initialization.");
     } else {
-        // Запуск через setTimeout для гарантии загрузки Lampa.Storage и Lampa.Listener
         setTimeout(initializeLampaQualityPlugin, 100);
     }
 

@@ -51,7 +51,7 @@ Lampa.Platform.tv();
       };
 
       // Новая иконка Play
-      var playIconSvg = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M.001 1.165v21.669a1.275 1.275 0 0 0 1.891 1.017l-.006.003 21.442-10.8a1.172 1.172 0 0 0 .007-2.113l-.007-.003L1.886.138A1.273 1.273 0 0 0 .003 1.162v.004z" fill="currentColor"/></svg>';
+      var playIconSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><path d="M27.268 16.999 4.732 30.001C3.78 30.55 3 30.1 3 29V3c0-1.1.78-1.55 1.732-1.001L27.267 15c.953.55.953 1.45.001 1.999" fill="currentColor"/></svg>';
 
       // Перебираем кнопки для обработки и сортировки
       allButtons.each(function () {
@@ -102,3 +102,4 @@ Lampa.Platform.tv();
     }, 100);
   });
 })();
+

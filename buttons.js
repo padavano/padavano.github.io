@@ -8,129 +8,136 @@ Lampa.Platform.tv();
 (function () {
   "use strict";
 
-  // Порядок кнопок по умолчанию
   var defaultPriority = ["online", "torrent", "trailer", "other"];
+  var playIconSvgHTML = '<svg class="custom-play-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><path d="M27.268 16.999 4.732 30.001C3.78 30.55 3 30.1 3 29V3c0-1.1.78-1.55 1.732-1.001L27.267 15c.953.55.953 1.45.001 1.999" fill="currentColor"/></svg>';
 
-  // Инициализация хранилища
   if (Lampa.Storage.get("full_btn_priority") === undefined) {
     Lampa.Storage.set("full_btn_priority", "{}");
   }
 
   Lampa.Listener.follow("full", function (eventData) {
-    if (eventData.type !== "complite") {
-      return;
-    }
+    if (eventData.type !== "complite") return;
 
-    // Получаем корневой DOM-элемент рендера. 
-    // Lampa возвращает jQuery объект, берем [0] чтобы получить чистый DOM узел.
     var renderWrapper = eventData.object.activity.render();
     var targetNode = renderWrapper[0] || renderWrapper;
+    var timer = null;
+    var observer = null;
 
-    // Функция основной логики
+    // Функция основной обработки (Сортировка + Иконки)
     var processButtons = function () {
       var buttonsContainer = targetNode.querySelector(".full-start-new__buttons");
-      
-      // Если контейнера нет — выходим (на всякий случай)
       if (!buttonsContainer) return;
 
-      // Удаляем стандартную кнопку Play, если она есть
-      var playBtn = targetNode.querySelector(".button--play");
-      if (playBtn) {
-        playBtn.remove();
-      }
-
-      // 1. Находим все кнопки в обоих возможных контейнерах
-      // querySelectorAll возвращает NodeList
-      var allButtonsNodeList = targetNode.querySelectorAll(".buttons--container .full-start__button, .full-start-new__buttons .full-start__button");
+      // 1. Подготовка кнопок
+      var allButtons = Array.from(targetNode.querySelectorAll(".buttons--container .full-start__button, .full-start-new__buttons .full-start__button"));
       
-      // Преобразуем NodeList в массив для удобной работы
-      var allButtons = Array.prototype.slice.call(allButtonsNodeList);
-
       if (allButtons.length === 0) return;
 
-      var groups = {
-        online: [],
-        torrent: [],
-        trailer: [],
-        other: []
-      };
+      // Удаляем стандартную кнопку Play (если вдруг есть)
+      var simplePlay = targetNode.querySelector(".button--play");
+      if (simplePlay) simplePlay.remove();
 
-      // Новая иконка Play
-      var playIconSvgHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><path d="M27.268 16.999 4.732 30.001C3.78 30.55 3 30.1 3 29V3c0-1.1.78-1.55 1.732-1.001L27.267 15c.953.55.953 1.45.001 1.999" fill="currentColor"/></svg>';
+      var groups = { online: [], torrent: [], trailer: [], other: [] };
 
-      // Перебираем кнопки
-      allButtons.forEach(function (currentBtn) {
-        // Скрываем кнопку опций
-        if (currentBtn.classList.contains("button--options")) {
-          currentBtn.classList.add("hide");
+      allButtons.forEach(function (btn) {
+        // Скрываем опции
+        if (btn.classList.contains("button--options")) {
+          btn.classList.add("hide");
         }
 
-        var btnClasses = currentBtn.className || "";
+        // --- ЛОГИКА ИКОНКИ ---
+        // Проверяем класс. Также проверяем, не заменили ли мы иконку уже (чтобы не дублировать при повторном запуске)
+        if (btn.classList.contains("lampac--button") && !btn.querySelector(".custom-play-icon")) {
+          // Удаляем ВСЕ старые SVG внутри кнопки
+          var oldSvgs = btn.querySelectorAll("svg");
+          oldSvgs.forEach(function(svg) { svg.remove(); });
+          
+          // Вставляем новую
+          btn.insertAdjacentHTML("afterbegin", playIconSvgHTML);
+        }
 
-        // Определение категории
+        // --- ЛОГИКА СОРТИРОВКИ ---
+        var btnClasses = btn.className || "";
         var category = "other";
         if (btnClasses.indexOf("online") !== -1) category = "online";
         else if (btnClasses.indexOf("torrent") !== -1) category = "torrent";
         else if (btnClasses.indexOf("trailer") !== -1) category = "trailer";
 
-        // Замена иконки для кнопок Lampac
-        if (currentBtn.classList.contains("lampac--button")) {
-          var oldSvg = currentBtn.querySelector("svg");
-          if (oldSvg) oldSvg.remove();
-          
-          // Вставляем новую SVG в начало кнопки
-          currentBtn.insertAdjacentHTML("afterbegin", playIconSvgHTML);
-        }
-
-        groups[category].push(currentBtn);
+        groups[category].push(btn);
       });
 
-      // Создаем фрагмент документа (легковесный контейнер, не влияющий на DOM при наполнении)
+      // 2. Вставка в DOM
+      // Используем Fragment для одной операции вставки
       var fragment = document.createDocumentFragment();
+      var hasButtons = false;
 
-      // Собираем фрагмент в нужном порядке
       defaultPriority.forEach(function (key) {
-        if (groups[key] && groups[key].length) {
+        if (groups[key].length) {
           groups[key].forEach(function(btn) {
-             // appendChild перемещает элемент из старого места в новое (автоматический detach)
-             fragment.appendChild(btn);
+            fragment.appendChild(btn);
           });
+          hasButtons = true;
         }
       });
 
-      // 2. Вставляем все кнопки разом
-      buttonsContainer.appendChild(fragment);
+      if (hasButtons) {
+        // Временно отключаем обсервер, чтобы наша собственная перестановка кнопок 
+        // не вызывала бесконечный цикл "изменение -> сортировка -> изменение..."
+        if (observer) observer.disconnect();
+        
+        buttonsContainer.appendChild(fragment);
+        
+        // Применяем стили
+        buttonsContainer.style.display = "flex";
+        buttonsContainer.style.flexWrap = "wrap";
+        buttonsContainer.style.gap = "10px";
 
-      // Применяем CSS стили к контейнеру
-      buttonsContainer.style.display = "flex";
-      buttonsContainer.style.flexWrap = "wrap";
-      buttonsContainer.style.gap = "10px";
-
-      // Обновляем навигацию Lampa
-      Lampa.Controller.toggle("full_start");
+        // Возвращаем наблюдение (вдруг Lampa добавит еще кнопку позже, например Трейлер)
+        if (observer) startObserver(buttonsContainer); 
+        
+        Lampa.Controller.toggle("full_start");
+      }
     };
 
-    // --- Логика запуска (MutationObserver) ---
+    // Функция запуска обсервера
+    var startObserver = function(elementToWatch) {
+        observer = new MutationObserver(function (mutations) {
+            // Debounce: сбрасываем таймер при каждом "чихе" DOM
+            if (timer) clearTimeout(timer);
+            
+            // Ждем 20мс тишины. Если за 20мс ничего не добавилось — считаем, что рендер готов.
+            timer = setTimeout(function() {
+                processButtons();
+            }, 20);
+        });
 
-    // Если кнопки уже есть (быстрый рендер), запускаем сразу
-    if (targetNode.querySelector(".full-start-new__buttons")) {
-        processButtons();
+        observer.observe(elementToWatch, {
+            childList: true, // следим за добавлением детей
+            subtree: true    // и за вложенностью (если SVG грузится внутрь кнопки)
+        });
+    };
+
+    // --- ТОЧКА ВХОДА ---
+    // 1. Сначала ищем контейнер
+    var existContainer = targetNode.querySelector(".full-start-new__buttons");
+    
+    if (existContainer) {
+        // Если контейнер уже есть, сразу запускаем наблюдение за ним и первую обработку
+        processButtons(); 
+        startObserver(existContainer);
     } else {
-        // Если кнопок нет, ставим наблюдателя
-        var observer = new MutationObserver(function (mutations, obs) {
-            // Проверяем, появился ли нужный контейнер
+        // Если контейнера нет, ждем его появления в targetNode
+        var initObserver = new MutationObserver(function(mutations, obs) {
             var container = targetNode.querySelector(".full-start-new__buttons");
             if (container) {
-                processButtons();
-                obs.disconnect(); // Останавливаем наблюдение после выполнения
+                // Контейнер появился!
+                obs.disconnect(); // перестаем следить за корнем
+                processButtons(); // пробуем отсортировать то, что уже есть
+                startObserver(container); // начинаем следить конкретно за кнопками внутри
             }
         });
-
-        // Начинаем наблюдать за изменениями в DOM (добавление детей)
-        observer.observe(targetNode, {
-            childList: true,
-            subtree: true
-        });
+        initObserver.observe(targetNode, { childList: true, subtree: true });
     }
+
   });
 })();

@@ -1,12 +1,8 @@
 // Ссылка на плагин: https://padavano.github.io/buttons.js
-// [ИЗМЕНЕНИЯ v1.02]
-// 1. Читаемые имена переменных ( eventData, allButtons, groups и т.д.).
-// 2. Убрано клонирование (.clone()): Теперь работаем со ссылками на существующие элементы. Это экономит память (не копируем обработчики событий).
-// 3. Убрана лишняя сортировка: Кнопки собираются в группы (groups) в том порядке, в котором они идут в коде.
-// 4. Оптимизация цикла: Замена иконки (svg) внутри единого цикла перебора кнопок, а не отдельным проходом после вставки (меньше обращений к DOM).
-// 5. Вставка за один раз: Собираем все кнопки в массив resultArray и вставляем их в контейнер одной операцией .append() (минимизируем перерисовку страницы).
-// 6. Реализация приоритетов: Теперь, если массив порядка кнопок изменить в начале кода (или загрузить из настроек), плагин реально поменяет порядок вывода.
-// 7. Добавлен hide для button--options (кнопка с тремя точками).
+// [ИЗМЕНЕНИЯ v1.03]
+// 1. Полный отказ от jQuery внутри логики плагина.
+// 2. Удален setTimeout: Используется MutationObserver для мгновенной реакции на появление кнопок.
+// 3. DocumentFragment: Максимальная производительность при вставке отсортированных кнопок.
 
 Lampa.Platform.tv();
 (function () {
@@ -15,7 +11,7 @@ Lampa.Platform.tv();
   // Порядок кнопок по умолчанию
   var defaultPriority = ["online", "torrent", "trailer", "other"];
 
-  // Инициализация хранилища (для совместимости)
+  // Инициализация хранилища
   if (Lampa.Storage.get("full_btn_priority") === undefined) {
     Lampa.Storage.set("full_btn_priority", "{}");
   }
@@ -25,23 +21,32 @@ Lampa.Platform.tv();
       return;
     }
 
-    setTimeout(function () {
-      var renderObject = eventData.object.activity.render();
+    // Получаем корневой DOM-элемент рендера. 
+    // Lampa возвращает jQuery объект, берем [0] чтобы получить чистый DOM узел.
+    var renderWrapper = eventData.object.activity.render();
+    var targetNode = renderWrapper[0] || renderWrapper;
+
+    // Функция основной логики
+    var processButtons = function () {
+      var buttonsContainer = targetNode.querySelector(".full-start-new__buttons");
       
-      // Проверки на существование элементов
-      if (!renderObject.length) return;
-      var buttonsContainer = renderObject.find(".full-start-new__buttons");
-      if (!buttonsContainer.length) return;
+      // Если контейнера нет — выходим (на всякий случай)
+      if (!buttonsContainer) return;
 
       // Удаляем стандартную кнопку Play, если она есть
-      renderObject.find(".button--play").remove();
+      var playBtn = targetNode.querySelector(".button--play");
+      if (playBtn) {
+        playBtn.remove();
+      }
 
-      // 1. Находим все кнопки в обоих контейнерах
-      var allButtons = renderObject.find(".buttons--container .full-start__button, .full-start-new__buttons .full-start__button");
+      // 1. Находим все кнопки в обоих возможных контейнерах
+      // querySelectorAll возвращает NodeList
+      var allButtonsNodeList = targetNode.querySelectorAll(".buttons--container .full-start__button, .full-start-new__buttons .full-start__button");
+      
+      // Преобразуем NodeList в массив для удобной работы
+      var allButtons = Array.prototype.slice.call(allButtonsNodeList);
 
-      // 2. "Открепляем" кнопки от DOM. 
-      // Это сохраняет их события (клики работают), но убирает визуально для пересортировки.
-      allButtons.detach(); 
+      if (allButtons.length === 0) return;
 
       var groups = {
         online: [],
@@ -51,17 +56,16 @@ Lampa.Platform.tv();
       };
 
       // Новая иконка Play
-      var playIconSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><path d="M27.268 16.999 4.732 30.001C3.78 30.55 3 30.1 3 29V3c0-1.1.78-1.55 1.732-1.001L27.267 15c.953.55.953 1.45.001 1.999" fill="currentColor"/></svg>';
+      var playIconSvgHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><path d="M27.268 16.999 4.732 30.001C3.78 30.55 3 30.1 3 29V3c0-1.1.78-1.55 1.732-1.001L27.267 15c.953.55.953 1.45.001 1.999" fill="currentColor"/></svg>';
 
-      // Перебираем кнопки для обработки и сортировки
-      allButtons.each(function () {
-        var currentBtn = $(this);
-        var btnClasses = currentBtn.attr("class") || "";
-
+      // Перебираем кнопки
+      allButtons.forEach(function (currentBtn) {
         // Скрываем кнопку опций
-        if (currentBtn.hasClass("button--options")) {
-            currentBtn.addClass("hide");
+        if (currentBtn.classList.contains("button--options")) {
+          currentBtn.classList.add("hide");
         }
+
+        var btnClasses = currentBtn.className || "";
 
         // Определение категории
         var category = "other";
@@ -70,36 +74,63 @@ Lampa.Platform.tv();
         else if (btnClasses.indexOf("trailer") !== -1) category = "trailer";
 
         // Замена иконки для кнопок Lampac
-        if (currentBtn.hasClass("lampac--button")) {
-           currentBtn.find("svg").remove(); 
-           currentBtn.prepend(playIconSvg);
+        if (currentBtn.classList.contains("lampac--button")) {
+          var oldSvg = currentBtn.querySelector("svg");
+          if (oldSvg) oldSvg.remove();
+          
+          // Вставляем новую SVG в начало кнопки
+          currentBtn.insertAdjacentHTML("afterbegin", playIconSvgHTML);
         }
 
         groups[category].push(currentBtn);
       });
 
-      // Формируем итоговый массив в нужном порядке
-      var resultArray = [];
+      // Создаем фрагмент документа (легковесный контейнер, не влияющий на DOM при наполнении)
+      var fragment = document.createDocumentFragment();
+
+      // Собираем фрагмент в нужном порядке
       defaultPriority.forEach(function (key) {
         if (groups[key] && groups[key].length) {
-           resultArray = resultArray.concat(groups[key]);
+          groups[key].forEach(function(btn) {
+             // appendChild перемещает элемент из старого места в новое (автоматический detach)
+             fragment.appendChild(btn);
+          });
         }
       });
 
-      // 3. Вставляем все кнопки обратно в контейнер одной операцией
-      buttonsContainer.append(resultArray);
+      // 2. Вставляем все кнопки разом
+      buttonsContainer.appendChild(fragment);
 
       // Применяем CSS стили к контейнеру
-      buttonsContainer.css({
-        display: "flex",
-        flexWrap: "wrap",
-        gap: "10px"
-      });
+      buttonsContainer.style.display = "flex";
+      buttonsContainer.style.flexWrap = "wrap";
+      buttonsContainer.style.gap = "10px";
 
       // Обновляем навигацию Lampa
       Lampa.Controller.toggle("full_start");
+    };
 
-    }, 100);
+    // --- Логика запуска (MutationObserver) ---
+
+    // Если кнопки уже есть (быстрый рендер), запускаем сразу
+    if (targetNode.querySelector(".full-start-new__buttons")) {
+        processButtons();
+    } else {
+        // Если кнопок нет, ставим наблюдателя
+        var observer = new MutationObserver(function (mutations, obs) {
+            // Проверяем, появился ли нужный контейнер
+            var container = targetNode.querySelector(".full-start-new__buttons");
+            if (container) {
+                processButtons();
+                obs.disconnect(); // Останавливаем наблюдение после выполнения
+            }
+        });
+
+        // Начинаем наблюдать за изменениями в DOM (добавление детей)
+        observer.observe(targetNode, {
+            childList: true,
+            subtree: true
+        });
+    }
   });
 })();
-

@@ -12,8 +12,10 @@ Lampa.Platform.tv();
 (function () {
   "use strict";
 
+  // Порядок кнопок по умолчанию
   var defaultPriority = ["online", "torrent", "trailer", "other"];
 
+  // Инициализация хранилища (для совместимости)
   if (Lampa.Storage.get("full_btn_priority") === undefined) {
     Lampa.Storage.set("full_btn_priority", "{}");
   }
@@ -26,18 +28,19 @@ Lampa.Platform.tv();
     setTimeout(function () {
       var renderObject = eventData.object.activity.render();
       
+      // Проверки на существование элементов
       if (!renderObject.length) return;
-
       var buttonsContainer = renderObject.find(".full-start-new__buttons");
       if (!buttonsContainer.length) return;
 
-      // Удаляем стандартную кнопку Play
+      // Удаляем стандартную кнопку Play, если она есть
       renderObject.find(".button--play").remove();
 
-      // 1. Находим все нужные кнопки
+      // 1. Находим все кнопки в обоих контейнерах
       var allButtons = renderObject.find(".buttons--container .full-start__button, .full-start-new__buttons .full-start__button");
 
-      // 2. Открепляем кнопки, сохраняя их события
+      // 2. "Открепляем" кнопки от DOM. 
+      // Это сохраняет их события (клики работают), но убирает визуально для пересортировки.
       allButtons.detach(); 
 
       var groups = {
@@ -47,25 +50,26 @@ Lampa.Platform.tv();
         other: []
       };
 
+      // Новая иконка Play
       var playIconSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><path d="M20.331 14.644l-13.794-13.831 17.55 10.075zM2.938 0c-0.813 0.425-1.356 1.2-1.356 2.206v27.581c0 1.006 0.544 1.781 1.356 2.206l16.038-16zM29.512 14.1l-3.681-2.131-4.106 4.031 4.106 4.031 3.756-2.131c1.125-0.893 1.125-2.906-0.075-3.8zM6.538 31.188l17.55-10.075-3.756-3.756z" fill="currentColor"></path></svg>';
 
+      // Перебираем кнопки для обработки и сортировки
       allButtons.each(function () {
         var currentBtn = $(this);
         var btnClasses = currentBtn.attr("class") || "";
 
-        // === 2.1 Дополнительная логика (Ваш запрос) ===
-        // Если это кнопка опций, добавляем ей класс hide
+        // Скрываем кнопку опций
         if (currentBtn.hasClass("button--options")) {
             currentBtn.addClass("hide");
         }
 
-        // 2.2 Определение категории
+        // Определение категории
         var category = "other";
         if (btnClasses.indexOf("online") !== -1) category = "online";
         else if (btnClasses.indexOf("torrent") !== -1) category = "torrent";
         else if (btnClasses.indexOf("trailer") !== -1) category = "trailer";
 
-        // 2.3 Замена иконки для кнопок Lampac
+        // Замена иконки для кнопок Lampac
         if (currentBtn.hasClass("lampac--button")) {
            currentBtn.find("svg").remove(); 
            currentBtn.prepend(playIconSvg);
@@ -74,7 +78,7 @@ Lampa.Platform.tv();
         groups[category].push(currentBtn);
       });
 
-      // Сборка массива
+      // Формируем итоговый массив в нужном порядке
       var resultArray = [];
       defaultPriority.forEach(function (key) {
         if (groups[key] && groups[key].length) {
@@ -82,15 +86,17 @@ Lampa.Platform.tv();
         }
       });
 
-      // 3. Вставляем кнопки обратно
+      // 3. Вставляем все кнопки обратно в контейнер одной операцией
       buttonsContainer.append(resultArray);
 
+      // Применяем CSS стили к контейнеру
       buttonsContainer.css({
         display: "flex",
         flexWrap: "wrap",
         gap: "10px"
       });
 
+      // Обновляем навигацию Lampa
       Lampa.Controller.toggle("full_start");
 
     }, 100);

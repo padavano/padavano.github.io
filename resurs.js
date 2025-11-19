@@ -523,6 +523,10 @@ function addCustomButtonsRow(partsData) {
                         var card = Lampa.Maker.make('Card', item, function(m) {
                             return m.only('Card', 'Callback');
                         });
+
+                        card.data.media_type = 'button';
+                        card.data.type = 'button';
+
                         card.data.img = buttonPosters[item.id] || ''; 
                         return card;
                     },

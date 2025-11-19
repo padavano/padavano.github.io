@@ -1,3 +1,8 @@
+// [Изменения v1.01]
+// 1. Добавлены атрибуты card.data.media_type = 'button' и card.data.type = 'button', чтобы карты не определялись как фильмы/сериалы.
+// 2. С карточки удалены элементы иконок: this.html.find('.card__icons').remove();
+
+
 (function (  ) {
     'use strict';
     
@@ -466,9 +471,9 @@ function initCustomButtons() {
 
 
      if (Lampa.Manifest.app_digital >= 300) {    
-	 return
-	 }
-	
+     return
+     }
+    
     else {
         function addCardListener() {
             if (window.lampa_listener_extensions) return;
@@ -496,7 +501,7 @@ function initCustomButtons() {
                         if (buttonActions[cardId]) {
                             buttonActions[cardId]();
                         }
-						 event.stopImmediatePropagation();
+                         event.stopImmediatePropagation();
                     });
                 }
             }
@@ -535,6 +540,7 @@ function addCustomButtonsRow(partsData) {
                             this.html.addClass('custom-button-card card--small card--collection');
                             this.html.find('.card__title').remove();
                             this.html.find('.card__age').remove();
+                            this.html.find('.card__icons').remove();
                         },
                         onlyEnter: function() {
                             if (buttonActions[b.id]) {
@@ -563,7 +569,7 @@ function addCustomButtonsRow(partsData) {
 function getPartsData() {
     var partsData = [];
     if (Lampa.Manifest.app_digital >= 300) { 
-    addCustomButtonsRow(partsData);	
+    addCustomButtonsRow(partsData); 
     } else {
         partsData.push(getCustomButtonsPart());
     }
@@ -802,7 +808,7 @@ function buildApiUrl(baseUrl) {
     return Lampa.Manifest.app_digital >= 300 ? wrapNew : wrapOld;
 }      
 
-	      function shuffleArray(array) {
+          function shuffleArray(array) {
             for (var i = array.length - 1; i > 0; i--) {
                 var j = Math.floor(Math.random() * (i + 1));
                 var temp = array[i];
@@ -905,7 +911,7 @@ function buildApiUrl(baseUrl) {
             return js ? this.card : $(this.card);
         };
     };
-	
+    
 // ближайшие эпизоды
 function getUpcomingEpisodesOld() {
     return function (callback) {
@@ -971,7 +977,7 @@ var SourceTMDB = function (parent) {
         var onError = arguments.length > 2 ? arguments[2] : undefined;
         var partsLimit = 9;
 
-        var partsData = getPartsData();	 
+        var partsData = getPartsData();  
         var CustomData = [];
         var trendingsData = [];
         
@@ -1368,7 +1374,7 @@ function getPopularPersons() {
 
 
         CustomData = CustomData.map(wrapWithWideFlag);
-		CustomData.push(getPopularPersons());
+        CustomData.push(getPopularPersons());
         shuffleArray(CustomData);
         CustomData.splice(4, 0, getUpcomingEpisodes());
 

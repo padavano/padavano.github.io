@@ -1,8 +1,6 @@
-// Версия 1.07
 // Ссылка на плагин: https://padavano.github.io/quality.js
-// [ИЗМЕНЕНИЯ v1.07]
-// 1. [ЛОГИКА] Если в объекте карточки нет массива 'names' (TMDB), плагин делает доп. запрос к CUB (tmdb.cub.rip).
-// 2. [СТИЛИ] Добавлен border-radius: 0 для облегчённой темы (body.light--version).
+// [ИЗМЕНЕНИЯ v1.08]
+// 1. [ЛОГИКА] Добавлены валидные типы Lampa - игнорировать все, что явно не фильм и не сериал.
 
 (function() {
     'use strict';
@@ -828,6 +826,10 @@
         var cardView = cardElement.querySelector('.card__view');
         var cardData = cardElement.card_data;
         if (!cardData || !cardView) return;
+
+        var validTypes = ['movie', 'tv', 'cartoon', 'anime']; // добавьте нужные типы Lampa
+        var currentType = cardData.media_type || cardData.type;
+        if (currentType && validTypes.indexOf(currentType) === -1) return;
 
         var isTvSeries = (getCardType(cardData) === 'tv');
         if (isTvSeries && LQE_CONFIG.SHOW_QUALITY_FOR_TV_SERIES === false) return;

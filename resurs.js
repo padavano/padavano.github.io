@@ -1,11 +1,10 @@
-// [Изменения v1.02]
-// 1. Удалены компоненты и код для старых версий Lampa (до 3.0)
-// 2. Удалена локализация uk и en, оставлена только ru.
+// [Изменения v1.03]
+// Ребрендинг в reSURS
 
 (function () {
     'use strict';
 
-    // Полифилы оставляем для совместимости с устаревшими WebView (Tizen/WebOS)
+    // Полифилы
     if (!Array.prototype.indexOf) {
         Array.prototype.indexOf = function (searchElement, fromIndex) {
             var k;
@@ -98,32 +97,32 @@
 
     // Настройки и константы
     var allSortOptions = [
-        { id: 'vote_count.desc', title: 'surs_vote_count_desc' },
-        { id: 'vote_average.desc', title: 'surs_vote_average_desc' },
-        { id: 'first_air_date.desc', title: 'surs_first_air_date_desc' },
-        { id: 'popularity.desc', title: 'surs_popularity_desc' },
-        { id: 'revenue.desc', title: 'surs_revenue_desc' }
+        { id: 'vote_count.desc', title: 'resurs_vote_count_desc' },
+        { id: 'vote_average.desc', title: 'resurs_vote_average_desc' },
+        { id: 'first_air_date.desc', title: 'resurs_first_air_date_desc' },
+        { id: 'popularity.desc', title: 'resurs_popularity_desc' },
+        { id: 'revenue.desc', title: 'resurs_revenue_desc' }
     ];
 
     var allGenres = [
-        { id: 28, title: 'surs_genre_action' },
-        { id: 35, title: 'surs_genre_comedy' },
-        { id: 18, title: 'surs_genre_drama' },
-        { id: 10749, title: 'surs_genre_romance' },
-        { id: 16, title: 'surs_genre_animation' },
-        { id: 10762, title: 'surs_genre_kids' },
-        { id: 12, title: 'surs_genre_adventure' },
-        { id: 80, title: 'surs_genre_crime' },
-        { id: 9648, title: 'surs_genre_mystery' },
-        { id: 878, title: 'surs_genre_sci_fi' },
-        { id: 37, title: 'surs_genre_western' },
-        { id: 53, title: 'surs_genre_thriller' },
-        { id: 10751, title: 'surs_genre_family' },
-        { id: 14, title: 'surs_genre_fantasy' },
-        { id: 10764, title: 'surs_genre_reality' },
-        { id: 10759, title: 'surs_genre_action_adventure' },
-        { id: 10766, title: 'surs_genre_soap' },
-        { id: 10767, title: 'surs_genre_talk_show' }
+        { id: 28, title: 'resurs_genre_action' },
+        { id: 35, title: 'resurs_genre_comedy' },
+        { id: 18, title: 'resurs_genre_drama' },
+        { id: 10749, title: 'resurs_genre_romance' },
+        { id: 16, title: 'resurs_genre_animation' },
+        { id: 10762, title: 'resurs_genre_kids' },
+        { id: 12, title: 'resurs_genre_adventure' },
+        { id: 80, title: 'resurs_genre_crime' },
+        { id: 9648, title: 'resurs_genre_mystery' },
+        { id: 878, title: 'resurs_genre_sci_fi' },
+        { id: 37, title: 'resurs_genre_western' },
+        { id: 53, title: 'resurs_genre_thriller' },
+        { id: 10751, title: 'resurs_genre_family' },
+        { id: 14, title: 'resurs_genre_fantasy' },
+        { id: 10764, title: 'resurs_genre_reality' },
+        { id: 10759, title: 'resurs_genre_action_adventure' },
+        { id: 10766, title: 'resurs_genre_soap' },
+        { id: 10767, title: 'resurs_genre_talk_show' }
     ];
 
     var allStreamingServices = [
@@ -168,7 +167,7 @@
     ];
 
     function getAllStoredSettings() {
-        return Lampa.Storage.get('surs_settings') || {};
+        return Lampa.Storage.get('resurs_settings') || {};
     }
 
     function getProfileSettings() {
@@ -182,7 +181,7 @@
     }
 
     function saveAllStoredSettings(settings) {
-        Lampa.Storage.set('surs_settings', settings);
+        Lampa.Storage.set('resurs_settings', settings);
     }
 
     function getStoredSetting(key, defaultValue) {
@@ -221,30 +220,30 @@
     }
 
     var buttonPosters = {
-        surs_main: 'https://aviamovie.github.io/img/main.png',
-        surs_bookmarks: 'https://aviamovie.github.io/img/bookmarks.png',
-        surs_history: 'https://aviamovie.github.io/img/history.png',
-        surs_select: 'https://aviamovie.github.io/img/select_new.png',
-        surs_new: 'https://aviamovie.github.io/img/new.png',
-        surs_rus: 'https://aviamovie.github.io/img/rus.png',
-        surs_kids: 'https://aviamovie.github.io/img/kids.png'
+        resurs_main: 'https://aviamovie.github.io/img/main.png',
+        resurs_bookmarks: 'https://aviamovie.github.io/img/bookmarks.png',
+        resurs_history: 'https://aviamovie.github.io/img/history.png',
+        resurs_select: 'https://aviamovie.github.io/img/select_new.png',
+        resurs_new: 'https://aviamovie.github.io/img/new.png',
+        resurs_rus: 'https://aviamovie.github.io/img/rus.png',
+        resurs_kids: 'https://aviamovie.github.io/img/kids.png'
     };
 
     function getAllButtons() {
         return [
-            { id: 'surs_main', title: 'surs_main' },
-            { id: 'surs_bookmarks', title: 'surs_bookmarks' },
-            { id: 'surs_history', title: 'surs_history' },
-            { id: 'surs_select', title: 'surs_select' },
-            { id: 'surs_new', title: 'surs_new' },
-            { id: 'surs_rus', title: 'surs_rus' },
-            { id: 'surs_kids', title: 'surs_kids' }
+            { id: 'resurs_main', title: 'resurs_main' },
+            { id: 'resurs_bookmarks', title: 'resurs_bookmarks' },
+            { id: 'resurs_history', title: 'resurs_history' },
+            { id: 'resurs_select', title: 'resurs_select' },
+            { id: 'resurs_new', title: 'resurs_new' },
+            { id: 'resurs_rus', title: 'resurs_rus' },
+            { id: 'resurs_kids', title: 'resurs_kids' }
         ];
     }
 
     var buttonActions = {
-        surs_main: function () {
-            var sourceName = Lampa.Storage.get('surs_name') || 'SURS';
+        resurs_main: function () {
+            var sourceName = Lampa.Storage.get('resurs_name') || 'reSURS';
             Lampa.Activity.push({
                 source: Lampa.Storage.get('source'),
                 title: Lampa.Lang.translate('title_main') + ' - ' + sourceName,
@@ -252,30 +251,31 @@
                 page: 1
             });
         },
-        surs_bookmarks: function () {
+        resurs_bookmarks: function () {
             Lampa.Activity.push({
                 url: '',
-                title: Lampa.Lang.translate('surs_bookmarks'),
+                title: Lampa.Lang.translate('resurs_bookmarks'),
                 component: 'bookmarks',
                 page: 1
             });
         },
-        surs_history: function () {
+        resurs_history: function () {
             Lampa.Activity.push({
                 url: '',
-                title: Lampa.Lang.translate('surs_history'),
+                title: Lampa.Lang.translate('resurs_history'),
                 component: 'favorite',
                 type: 'history',
                 page: 1
             });
         },
-        surs_select: function () {
+        resurs_select: function () {
+            // Внешний скрипт пока не переименован, оставляем вызовы как есть для совместимости
             if (window.SursSelect && typeof window.SursSelect.showSursSelectMenu === 'function') {
                 window.SursSelect.showSursSelectMenu();
             }
         },
-        surs_new: function () {
-            var sourceName = Lampa.Storage.get('surs_name') || 'SURS';
+        resurs_new: function () {
+            var sourceName = Lampa.Storage.get('resurs_name') || 'reSURS';
             Lampa.Activity.push({
                 source: sourceName + ' NEW',
                 title: Lampa.Lang.translate('title_main') + ' - ' + sourceName + ' NEW',
@@ -283,8 +283,8 @@
                 page: 1
             });
         },
-        surs_rus: function () {
-            var sourceName = Lampa.Storage.get('surs_name') || 'SURS';
+        resurs_rus: function () {
+            var sourceName = Lampa.Storage.get('resurs_name') || 'reSURS';
             Lampa.Activity.push({
                 source: sourceName + ' RUS',
                 title: Lampa.Lang.translate('title_main') + ' - ' + sourceName + ' RUS',
@@ -292,8 +292,8 @@
                 page: 1
             });
         },
-        surs_kids: function () {
-            var sourceName = Lampa.Storage.get('surs_name') || 'SURS';
+        resurs_kids: function () {
+            var sourceName = Lampa.Storage.get('resurs_name') || 'reSURS';
             Lampa.Activity.push({
                 source: sourceName + ' KIDS',
                 title: Lampa.Lang.translate('title_main') + ' - ' + sourceName + ' KIDS',
@@ -304,7 +304,6 @@
     };
 
     function initCustomButtons() {
-        // Только CSS, логика слушателей для старых версий удалена
         Lampa.Template.add('custom_button_style', `
             <style>
                 .custom-button-card {
@@ -392,7 +391,6 @@
     // Глобальные функции фильтрации
     function filterCyrillic(items) {
         var language = Lampa.Storage.get('language');
-        // Если язык не русский, возвращаем все элементы без фильтрации
         if (language !== 'ru') {
             return items;
         }
@@ -467,7 +465,7 @@
 
     function adjustSortForMovies(sort) {
         if (sort.id === 'first_air_date.desc') {
-            sort = { id: 'release_date.desc', title: 'surs_first_air_date_desc' };
+            sort = { id: 'release_date.desc', title: 'resurs_first_air_date_desc' };
         }
         if (sort.id === 'release_date.desc') {
             var endDate = new Date();
@@ -501,7 +499,6 @@
         return Math.random() < 0.1;
     }
 
-    // Современная обертка (только для Lampa 3.0+)
     function wrapWithWideFlag(requestFunc) {
         return function (callback) {
             requestFunc(function (json) {
@@ -511,7 +508,7 @@
                     if (Array.isArray(json.results)) {
                         json.results.forEach(function (c) {
                             c.promo = c.overview || '';
-                            c.promo_title = c.title || c.name || Lampa.Lang.translate('surs_noname');
+                            c.promo_title = c.title || c.name || Lampa.Lang.translate('resurs_noname');
                             c.params = {
                                 style: { name: 'wide' }
                             };
@@ -535,7 +532,6 @@
         }
     }
 
-    // Ближайшие эпизоды (Только новый API)
     function getUpcomingEpisodes() {
         return function (cb) {
             var lately = Lampa.TimeTable.lately().slice(0, 20);
@@ -561,13 +557,13 @@
 
             cb({
                 results: lately,
-                title: Lampa.Lang.translate('surs_title_upcoming_episodes')
+                title: Lampa.Lang.translate('resurs_title_upcoming_episodes')
             });
         };
     }
 
     function startPlugin() {
-        window.plugin_surs_ready = true;
+        window.plugin_resurs_ready = true;
 
         var SourceTMDB = function (parent) {
             this.network = new Lampa.Reguest();
@@ -594,7 +590,7 @@
                                 return !forbiddenLanguages.includes(result.original_language);
                             });
                         }
-                        json.title = Lampa.Lang.translate('surs_title_trend_week') + ' ' + Lampa.Lang.translate('surs_movies');
+                        json.title = Lampa.Lang.translate('resurs_title_trend_week') + ' ' + Lampa.Lang.translate('resurs_movies');
                         callback(json);
                     }, callback);
                 }
@@ -611,7 +607,7 @@
                                 });
                             });
                         }
-                        json.title = Lampa.Lang.translate('surs_title_trend_week') + ' ' + Lampa.Lang.translate('surs_series');
+                        json.title = Lampa.Lang.translate('resurs_title_trend_week') + ' ' + Lampa.Lang.translate('resurs_series');
                         callback(json);
                     }, callback);
                 }
@@ -640,7 +636,7 @@
                             if (json.results) {
                                 json.results = applyFilters(json.results);
                             }
-                            json.title = Lampa.Lang.translate(sort.title) + ' (' + Lampa.Lang.translate(genre.title) + ') ' + Lampa.Lang.translate('surs_on') + ' ' + serviceName;
+                            json.title = Lampa.Lang.translate(sort.title) + ' (' + Lampa.Lang.translate(genre.title) + ') ' + Lampa.Lang.translate('resurs_on') + ' ' + serviceName;
                             callback(json);
                         }, callback);
                     };
@@ -664,7 +660,7 @@
                             if (json.results) {
                                 json.results = applyFilters(json.results);
                             }
-                            json.title = Lampa.Lang.translate(sort.title) + ' ' + Lampa.Lang.translate('surs_on') + ' ' + serviceName;
+                            json.title = Lampa.Lang.translate(sort.title) + ' ' + Lampa.Lang.translate('resurs_on') + ' ' + serviceName;
                             callback(json);
                         }, callback);
                     };
@@ -720,8 +716,8 @@
                                 if (!options.russian && !options.ukrainian) {
                                     json.results = applyFilters(json.results);
                                 }
-                                var titlePrefix = options.russian ? Lampa.Lang.translate('surs_russian') :
-                                    options.ukrainian ? Lampa.Lang.translate('surs_ukrainian') : '';
+                                var titlePrefix = options.russian ? Lampa.Lang.translate('resurs_russian') :
+                                    options.ukrainian ? Lampa.Lang.translate('resurs_ukrainian') : '';
                                 json.title = Lampa.Lang.translate(sort.title) + ' ' + titlePrefix + ' (' + Lampa.Lang.translate(genre.title) + ')';
                             }
                             callback(json);
@@ -749,11 +745,11 @@
                                 if (!options.russian && !options.ukrainian) {
                                     json.results = applyFilters(json.results);
                                 }
-                                var titlePrefix = options.russian ? Lampa.Lang.translate('surs_russian') :
-                                    options.korean ? Lampa.Lang.translate('surs_korean') :
-                                        options.turkish ? Lampa.Lang.translate('surs_turkish') :
-                                            options.ukrainian ? Lampa.Lang.translate('surs_ukrainian') : '';
-                                json.title = Lampa.Lang.translate(sort.title) + ' ' + titlePrefix + ' ' + Lampa.Lang.translate('surs_tv_shows') + ' (' + Lampa.Lang.translate(genre.title) + ')';
+                                var titlePrefix = options.russian ? Lampa.Lang.translate('resurs_russian') :
+                                    options.korean ? Lampa.Lang.translate('resurs_korean') :
+                                        options.turkish ? Lampa.Lang.translate('resurs_turkish') :
+                                            options.ukrainian ? Lampa.Lang.translate('resurs_ukrainian') : '';
+                                json.title = Lampa.Lang.translate(sort.title) + ' ' + titlePrefix + ' ' + Lampa.Lang.translate('resurs_tv_shows') + ' (' + Lampa.Lang.translate(genre.title) + ')';
                             }
                             callback(json);
                         }, callback);
@@ -794,7 +790,7 @@
                             if (json.results) {
                                 json.results = filterCyrillic(json.results);
                             }
-                            json.title = Lampa.Lang.translate(contentType === 'movie' ? 'surs_top_movies' : 'surs_top_tv') + ' (' + Lampa.Lang.translate(genre.title) + ')';
+                            json.title = Lampa.Lang.translate(contentType === 'movie' ? 'resurs_top_movies' : 'resurs_top_tv') + ' (' + Lampa.Lang.translate(genre.title) + ')';
                             callback(json);
                         }, callback);
                     };
@@ -827,9 +823,9 @@
                                         parseInt(content[dateField].substring(0, 4)) <= endYear;
                                 });
                             }
-                            json.title = Lampa.Lang.translate(type === 'movie' ? 'surs_top_movies' : 'surs_top_tv') +
+                            json.title = Lampa.Lang.translate(type === 'movie' ? 'resurs_top_movies' : 'resurs_top_tv') +
                                 ' (' + Lampa.Lang.translate(genre.title) + ')' +
-                                Lampa.Lang.translate('surs_for_period') + startYear + '-' + endYear;
+                                Lampa.Lang.translate('resurs_for_period') + startYear + '-' + endYear;
                             callback(json);
                         }, callback);
                     };
@@ -861,12 +857,11 @@
                     });
                 });
 
-                // Популярные персоны (Только новый API)
                 function getPopularPersons() {
                     return function (cb) {
                         owner.get('person/popular', params, function (json) {
                             json = Lampa.Utils.addSource(json, 'tmdb');
-                            json.title = Lampa.Lang.translate('surs_popular_persons');
+                            json.title = Lampa.Lang.translate('resurs_popular_persons');
                             json.results.forEach(function (person) {
                                 person.params = {
                                     module: Lampa.Maker.module('Card').only('Card', 'Release', 'Callback'),
@@ -928,7 +923,7 @@
                 function getStreamingWithGenres(serviceName, serviceId, isRussian) {
                     return function (callback) {
                         var genres = getGenres();
-                        var sort = { id: 'first_air_date.desc', title: 'surs_first_air_date_desc' };
+                        var sort = { id: 'first_air_date.desc', title: 'resurs_first_air_date_desc' };
                         var genre = genres[Math.floor(Math.random() * genres.length)];
                         var apiUrl = 'discover/tv?with_networks=' + serviceId +
                             '&with_genres=' + genre.id +
@@ -945,7 +940,7 @@
                             if (json.results) {
                                 json.results = applyFilters(json.results);
                             }
-                            json.title = Lampa.Lang.translate(sort.title) + ' (' + Lampa.Lang.translate(genre.title) + ') ' + Lampa.Lang.translate('surs_on') + ' ' + serviceName;
+                            json.title = Lampa.Lang.translate(sort.title) + ' (' + Lampa.Lang.translate(genre.title) + ') ' + Lampa.Lang.translate('resurs_on') + ' ' + serviceName;
                             callback(json);
                         }, callback);
                     };
@@ -953,7 +948,7 @@
 
                 function getStreaming(serviceName, serviceId, isRussian) {
                     return function (callback) {
-                        var sort = { id: 'first_air_date.desc', title: 'surs_first_air_date_desc' };
+                        var sort = { id: 'first_air_date.desc', title: 'resurs_first_air_date_desc' };
                         var apiUrl = 'discover/tv?with_networks=' + serviceId +
                             '&sort_by=' + sort.id;
 
@@ -968,7 +963,7 @@
                             if (json.results) {
                                 json.results = applyFilters(json.results);
                             }
-                            json.title = Lampa.Lang.translate(sort.title) + ' ' + Lampa.Lang.translate('surs_on') + ' ' + serviceName;
+                            json.title = Lampa.Lang.translate(sort.title) + ' ' + Lampa.Lang.translate('resurs_on') + ' ' + serviceName;
                             callback(json);
                         }, callback);
                     };
@@ -983,7 +978,7 @@
                 function getMovies(genre, options) {
                     options = options || {};
                     return function (callback) {
-                        var sort = adjustSortForMovies({ id: 'first_air_date.desc', title: 'surs_first_air_date_desc' });
+                        var sort = adjustSortForMovies({ id: 'first_air_date.desc', title: 'resurs_first_air_date_desc' });
                         var apiUrl = 'discover/movie?with_genres=' + genre.id + '&sort_by=' + sort.id;
 
                         if (options.russian) apiUrl += '&with_origin_country=RU';
@@ -997,8 +992,8 @@
                                 if (!options.russian && !options.ukrainian) {
                                     json.results = applyFilters(json.results);
                                 }
-                                var titlePrefix = options.russian ? Lampa.Lang.translate('surs_russian') :
-                                    options.ukrainian ? Lampa.Lang.translate('surs_ukrainian') : '';
+                                var titlePrefix = options.russian ? Lampa.Lang.translate('resurs_russian') :
+                                    options.ukrainian ? Lampa.Lang.translate('resurs_ukrainian') : '';
                                 json.title = Lampa.Lang.translate(sort.title) + ' ' + titlePrefix + ' (' + Lampa.Lang.translate(genre.title) + ')';
                             }
                             callback(json);
@@ -1009,7 +1004,7 @@
                 function getTVShows(genre, options) {
                     options = options || {};
                     return function (callback) {
-                        var sort = adjustSortForTVShows({ id: 'first_air_date.desc', title: 'surs_first_air_date_desc' });
+                        var sort = adjustSortForTVShows({ id: 'first_air_date.desc', title: 'resurs_first_air_date_desc' });
                         var apiUrl = 'discover/tv?with_genres=' + genre.id + '&sort_by=' + sort.id;
 
                         if (options.russian) apiUrl += '&with_origin_country=RU';
@@ -1025,11 +1020,11 @@
                                 if (!options.russian && !options.ukrainian) {
                                     json.results = applyFilters(json.results);
                                 }
-                                var titlePrefix = options.russian ? Lampa.Lang.translate('surs_russian') :
-                                    options.korean ? Lampa.Lang.translate('surs_korean') :
-                                        options.turkish ? Lampa.Lang.translate('surs_turkish') :
-                                            options.ukrainian ? Lampa.Lang.translate('surs_ukrainian') : '';
-                                json.title = Lampa.Lang.translate(sort.title) + ' ' + titlePrefix + ' ' + Lampa.Lang.translate('surs_tv_shows') + ' (' + Lampa.Lang.translate(genre.title) + ')';
+                                var titlePrefix = options.russian ? Lampa.Lang.translate('resurs_russian') :
+                                    options.korean ? Lampa.Lang.translate('resurs_korean') :
+                                        options.turkish ? Lampa.Lang.translate('resurs_turkish') :
+                                            options.ukrainian ? Lampa.Lang.translate('resurs_ukrainian') : '';
+                                json.title = Lampa.Lang.translate(sort.title) + ' ' + titlePrefix + ' ' + Lampa.Lang.translate('resurs_tv_shows') + ' (' + Lampa.Lang.translate(genre.title) + ')';
                             }
                             callback(json);
                         }, callback);
@@ -1793,7 +1788,7 @@
                 return;
             }
 
-            var sourceName = Lampa.Storage.get('surs_name') || 'SURS';
+            var sourceName = Lampa.Storage.get('resurs_name') || 'reSURS';
             var sourceNameNew = sourceName + ' NEW';
             var sourceNameKids = sourceName + ' KIDS';
             var sourceNameRus = sourceName + ' RUS';
@@ -1812,31 +1807,31 @@
                 return target;
             }
 
-            var surs_mod = assign({}, Lampa.Api.sources.tmdb, new SourceTMDB(Lampa.Api.sources.tmdb));
-            var surs_mod_new = assign({}, Lampa.Api.sources.tmdb, new SourceTMDBnew(Lampa.Api.sources.tmdb));
-            var surs_mod_kids = assign({}, Lampa.Api.sources.tmdb, new SourceTMDBkids(Lampa.Api.sources.tmdb));
-            var surs_mod_rus = assign({}, Lampa.Api.sources.tmdb, new SourceTMDBrus(Lampa.Api.sources.tmdb));
+            var resurs_mod = assign({}, Lampa.Api.sources.tmdb, new SourceTMDB(Lampa.Api.sources.tmdb));
+            var resurs_mod_new = assign({}, Lampa.Api.sources.tmdb, new SourceTMDBnew(Lampa.Api.sources.tmdb));
+            var resurs_mod_kids = assign({}, Lampa.Api.sources.tmdb, new SourceTMDBkids(Lampa.Api.sources.tmdb));
+            var resurs_mod_rus = assign({}, Lampa.Api.sources.tmdb, new SourceTMDBrus(Lampa.Api.sources.tmdb));
 
-            if (!surs_mod || !surs_mod_new || !surs_mod_kids || !surs_mod_rus) {
+            if (!resurs_mod || !resurs_mod_new || !resurs_mod_kids || !resurs_mod_rus) {
                 console.error('Failed to create one or more TMDB sources');
                 return;
             }
 
-            Lampa.Api.sources.surs_mod = surs_mod;
-            Lampa.Api.sources.surs_mod_new = surs_mod_new;
-            Lampa.Api.sources.surs_mod_kids = surs_mod_kids;
-            Lampa.Api.sources.surs_mod_rus = surs_mod_rus;
+            Lampa.Api.sources.resurs_mod = resurs_mod;
+            Lampa.Api.sources.resurs_mod_new = resurs_mod_new;
+            Lampa.Api.sources.resurs_mod_kids = resurs_mod_kids;
+            Lampa.Api.sources.resurs_mod_rus = resurs_mod_rus;
 
             try {
-                Object.defineProperty(Lampa.Api.sources, sourceName, { get: function () { return surs_mod; } });
-                Object.defineProperty(Lampa.Api.sources, sourceNameNew, { get: function () { return surs_mod_new; } });
-                Object.defineProperty(Lampa.Api.sources, sourceNameKids, { get: function () { return surs_mod_kids; } });
-                Object.defineProperty(Lampa.Api.sources, sourceNameRus, { get: function () { return surs_mod_rus; } });
+                Object.defineProperty(Lampa.Api.sources, sourceName, { get: function () { return resurs_mod; } });
+                Object.defineProperty(Lampa.Api.sources, sourceNameNew, { get: function () { return resurs_mod_new; } });
+                Object.defineProperty(Lampa.Api.sources, sourceNameKids, { get: function () { return resurs_mod_kids; } });
+                Object.defineProperty(Lampa.Api.sources, sourceNameRus, { get: function () { return resurs_mod_rus; } });
             } catch (e) {
-                Lampa.Api.sources[sourceName] = surs_mod;
-                Lampa.Api.sources[sourceNameNew] = surs_mod_new;
-                Lampa.Api.sources[sourceNameKids] = surs_mod_kids;
-                Lampa.Api.sources[sourceNameRus] = surs_mod_rus;
+                Lampa.Api.sources[sourceName] = resurs_mod;
+                Lampa.Api.sources[sourceNameNew] = resurs_mod_new;
+                Lampa.Api.sources[sourceNameKids] = resurs_mod_kids;
+                Lampa.Api.sources[sourceNameRus] = resurs_mod_rus;
             }
 
             var newSourceOptions = {};
@@ -1855,14 +1850,14 @@
         }
 
         function startProfileListener() {
-            var sourceName = Lampa.Storage.get('surs_name') || 'SURS';
+            var sourceName = Lampa.Storage.get('resurs_name') || 'reSURS';
             var sourceNameKids = sourceName + ' KIDS';
             var sourceNameRus = sourceName + ' RUS';
             var sourceNameNew = sourceName + ' NEW';
 
             Lampa.Listener.follow('profile', function (event) {
                 if (event.type !== 'changed') return;
-                if (!event.params.surs) return;
+                if (!event.params.resurs) return;
                 if (event.params.forKids) {
                     changeSource(sourceNameKids, true);
                 } else if (event.params.onlyRus) {
@@ -1919,20 +1914,20 @@
         }
 
         Lampa.Settings.listener.follow('open', function (e) {
-            if (e.name === 'surs') {
+            if (e.name === 'resurs') {
                 setTimeout(function () {
                     var currentSource = Lampa.Storage.get('source');
-                    var sourceName = Lampa.Storage.get('surs_name') || 'SURS';
+                    var sourceName = Lampa.Storage.get('resurs_name') || 'reSURS';
                     var sourceNameKids = sourceName + ' KIDS';
                     var sourceNameRus = sourceName + ' RUS';
                     var sourceNameNew = sourceName + ' NEW';
 
                     var paramsToHide = [
-                        'surs_cirillic', 'surs_minVotes', 'surs_ageRestrictions', 'surs_withoutKeywords',
-                        'surs_getMoviesByGenre', 'surs_getTVShowsByGenre', 'surs_streaming',
-                        'surs_getBestContentByGenre', 'surs_getBestContentByGenreAndPeriod',
-                        'surs_filter_menu', 'surs_best_content', 'surs_sort_options',
-                        'surs_global_streamings', 'surs_rus_streaming', 'surs_genres', 'surs_global_streaming'
+                        'resurs_cirillic', 'resurs_minVotes', 'resurs_ageRestrictions', 'resurs_withoutKeywords',
+                        'resurs_getMoviesByGenre', 'resurs_getTVShowsByGenre', 'resurs_streaming',
+                        'resurs_getBestContentByGenre', 'resurs_getBestContentByGenreAndPeriod',
+                        'resurs_filter_menu', 'resurs_best_content', 'resurs_sort_options',
+                        'resurs_global_streamings', 'resurs_rus_streaming', 'resurs_genres', 'resurs_global_streaming'
                     ];
 
                     var shouldHide = (currentSource === sourceNameKids || currentSource === sourceNameRus || currentSource === sourceNameNew);
@@ -1944,15 +1939,15 @@
 
                     if (shouldHide) {
                         var translations = {
-                            surs_geo_filters: "Настройки подборок",
-                            surs_filters: "Фильтры",
-                            surs_technical_settings: "Технические настройки"
+                            resurs_geo_filters: "Настройки подборок",
+                            resurs_filters: "Фильтры",
+                            resurs_technical_settings: "Технические настройки"
                         };
                         $('div.settings-param-title span').each(function () {
                             var text = $(this).text().trim();
-                            if (text === translations.surs_geo_filters ||
-                                text === translations.surs_filters ||
-                                text === translations.surs_technical_settings) {
+                            if (text === translations.resurs_geo_filters ||
+                                text === translations.resurs_filters ||
+                                text === translations.resurs_technical_settings) {
                                 $(this).closest('div.settings-param-title').remove();
                             }
                         });
@@ -1966,10 +1961,10 @@
 
             try {
                 var currentSource = Lampa.Storage.get('source');
-                var sourceName = Lampa.Storage.get('surs_name') || Lampa.Lang.translate('surs_source_name');
-                var sourceNameKids = sourceName + ' ' + Lampa.Lang.translate('surs_source_name_kids').split(' ')[1];
-                var sourceNameRus = sourceName + ' ' + Lampa.Lang.translate('surs_source_name_rus').split(' ')[1];
-                var sourceNameNew = sourceName + ' ' + Lampa.Lang.translate('surs_source_name_new').split(' ')[1];
+                var sourceName = Lampa.Storage.get('resurs_name') || Lampa.Lang.translate('resurs_source_name');
+                var sourceNameKids = sourceName + ' ' + Lampa.Lang.translate('resurs_source_name_kids').split(' ')[1];
+                var sourceNameRus = sourceName + ' ' + Lampa.Lang.translate('resurs_source_name_rus').split(' ')[1];
+                var sourceNameNew = sourceName + ' ' + Lampa.Lang.translate('resurs_source_name_new').split(' ')[1];
 
                 var sourceValues = {};
                 sourceValues[sourceName] = sourceName;
@@ -1978,37 +1973,37 @@
                 sourceValues[sourceNameRus] = sourceNameRus;
 
                 Lampa.SettingsApi.addComponent({
-                    component: 'surs',
-                    name: Lampa.Lang.translate('surs_collections') + ' ' + sourceName,
+                    component: 'resurs',
+                    name: Lampa.Lang.translate('resurs_collections') + ' ' + sourceName,
                     icon: '<svg height="200px" width="200px" version="1.1" id="_x32_" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 512 512" xml:space="preserve" fill="#000000"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"> <style type="text/css"> .st0{fill:#ffffff;} </style> <g> <path class="st0" d="M443.724,166.599c27.038-2.293,47.087-26.07,44.786-53.125c-2.292-27.038-26.078-47.087-53.115-44.795 c-27.038,2.301-47.078,26.088-44.776,53.124C392.91,148.85,416.677,168.9,443.724,166.599z"></path> <path class="st0" d="M431.752,346.544l30.541-114.485c5.068-19.305-6.466-39.075-25.78-44.144 c-19.304-5.077-39.075,6.448-44.152,25.771v-0.018L365.052,315.64l-78.755-13.276c-17.218-4.304-34.696,5.786-39.578,22.864 l-33.317,133.445c-3.82,13.342,3.913,27.28,17.274,31.1c13.37,3.81,27.298-3.923,31.128-17.283l39.392-98.638l61.286,16.155 C398.863,400.125,421.633,382.927,431.752,346.544z"></path> <path class="st0" d="M388.177,462.949l-0.121-0.01c-0.018,0-0.028,0-0.047,0L388.177,462.949z"></path> <path class="st0" d="M498.349,286.311c-10.1-2.999-20.721,2.749-23.722,12.858l-27.876,93.848 c-2.096,6.606-4.536,11.777-7.146,15.746c-3.987,5.944-8.002,9.373-13.854,12.093c-5.842,2.664-14.031,4.379-25.416,4.37 c-3.009,0.008-6.215-0.113-9.634-0.355l-54.009-3.363c-10.519-0.661-19.575,7.341-20.227,17.861 c-0.662,10.518,7.342,19.574,17.86,20.226l53.73,3.345c4.211,0.298,8.31,0.448,12.28,0.456c10.072-0.009,19.5-0.988,28.369-3.289 c13.268-3.392,25.315-10.127,34.501-19.892c9.251-9.736,15.531-21.885,19.91-35.609l0.074-0.214l28.015-94.362 C514.206,299.923,508.447,289.302,498.349,286.311z"></path> <path class="st0" d="M248.974,81.219L0,21.256v15.14v281.228l248.974-59.962V81.219z M225.123,238.87L23.851,287.355V51.536 l201.272,48.466V238.87z"></path> <polygon class="st0" points="204.989,115.189 47.991,84.937 47.991,253.953 204.989,223.692 "></polygon> </g> </g></svg>'
                 });
 
                 Lampa.SettingsApi.addParam({
-                    component: 'surs',
+                    component: 'resurs',
                     param: { name: '', type: 'title' },
                     field: {
-                        name: Lampa.Lang.translate('surs_collections') + ' ' + Lampa.Lang.translate('surs_from') + ' ' + sourceName,
-                        description: Lampa.Lang.translate('surs_main_update')
+                        name: Lampa.Lang.translate('resurs_collections') + ' ' + Lampa.Lang.translate('resurs_from') + ' ' + sourceName,
+                        description: Lampa.Lang.translate('resurs_main_update')
                     }
                 });
 
                 Lampa.SettingsApi.addParam({
-                    component: 'surs',
-                    param: { name: 'surs_empty1', type: 'title' },
-                    field: { name: Lampa.Lang.translate('surs_settings_interface'), description: '' }
+                    component: 'resurs',
+                    param: { name: 'resurs_empty1', type: 'title' },
+                    field: { name: Lampa.Lang.translate('resurs_settings_interface'), description: '' }
                 });
 
                 Lampa.SettingsApi.addParam({
-                    component: 'surs',
+                    component: 'resurs',
                     param: {
-                        name: 'surs_setSource',
+                        name: 'resurs_setSource',
                         type: 'select',
                         values: sourceValues,
                         default: sourceName
                     },
                     field: {
-                        name: Lampa.Lang.translate('surs_set_as_source'),
-                        description: Lampa.Lang.translate('surs_source_description')
+                        name: Lampa.Lang.translate('resurs_set_as_source'),
+                        description: Lampa.Lang.translate('resurs_source_description')
                     },
                     onChange: function (value) {
                         Lampa.Storage.set('source', value);
@@ -2016,11 +2011,11 @@
                 });
 
                 Lampa.SettingsApi.addParam({
-                    component: 'surs',
-                    param: { name: 'surs_setButtons', type: 'button' },
+                    component: 'resurs',
+                    param: { name: 'resurs_setButtons', type: 'button' },
                     field: {
-                        name: Lampa.Lang.translate('surs_add_to_menu'),
-                        description: Lampa.Lang.translate('surs_menu_description')
+                        name: Lampa.Lang.translate('resurs_add_to_menu'),
+                        description: Lampa.Lang.translate('resurs_menu_description')
                     },
                     onChange: function () {
                         showButtonsSelectionMenu(Lampa.Controller.enabled().name);
@@ -2043,7 +2038,7 @@
                     });
 
                     Lampa.Select.show({
-                        title: Lampa.Lang.translate('surs_select_menu_sources'),
+                        title: Lampa.Lang.translate('resurs_select_menu_sources'),
                         items: list,
                         onBack: function () { Lampa.Controller.toggle(previousController || 'settings'); },
                         onCheck: function (selectedItem) {
@@ -2093,21 +2088,21 @@
                 });
 
                 Lampa.SettingsApi.addParam({
-                    component: 'surs',
-                    param: { name: 'surs_custom_buttons', type: 'button' },
+                    component: 'resurs',
+                    param: { name: 'resurs_custom_buttons', type: 'button' },
                     field: {
-                        name: Lampa.Lang.translate('surs_custom_buttons'),
-                        description: Lampa.Lang.translate('surs_custom_buttons_description')
+                        name: Lampa.Lang.translate('resurs_custom_buttons'),
+                        description: Lampa.Lang.translate('resurs_custom_buttons_description')
                     },
                     onChange: function () {
-                        showSelectionMenu('surs_custom_buttons', getAllButtons(), 'custom_button_', 'id', Lampa.Controller.enabled().name);
+                        showSelectionMenu('resurs_custom_buttons', getAllButtons(), 'custom_button_', 'id', Lampa.Controller.enabled().name);
                     }
                 });
 
                 Lampa.SettingsApi.addParam({
-                    component: 'surs',
+                    component: 'resurs',
                     param: { name: '', type: 'title' },
-                    field: { name: Lampa.Lang.translate('surs_filters'), description: '' }
+                    field: { name: Lampa.Lang.translate('resurs_filters'), description: '' }
                 });
 
                 function showSelectionMenu(title, items, storagePrefix, keyField, previousController) {
@@ -2136,73 +2131,73 @@
                 }
 
                 Lampa.SettingsApi.addParam({
-                    component: 'surs',
-                    param: { name: 'surs_sort_options', type: 'button' },
+                    component: 'resurs',
+                    param: { name: 'resurs_sort_options', type: 'button' },
                     field: {
-                        name: Lampa.Lang.translate('surs_sort_types'),
-                        description: Lampa.Lang.translate('surs_sort_description')
+                        name: Lampa.Lang.translate('resurs_sort_types'),
+                        description: Lampa.Lang.translate('resurs_sort_description')
                     },
                     onChange: function () {
-                        showSelectionMenu('surs_sort_types', allSortOptions, 'sort_', 'id', Lampa.Controller.enabled().name);
+                        showSelectionMenu('resurs_sort_types', allSortOptions, 'sort_', 'id', Lampa.Controller.enabled().name);
                     }
                 });
 
                 Lampa.SettingsApi.addParam({
-                    component: 'surs',
-                    param: { name: 'surs_genres', type: 'button' },
+                    component: 'resurs',
+                    param: { name: 'resurs_genres', type: 'button' },
                     field: {
-                        name: Lampa.Lang.translate('surs_genres'),
-                        description: Lampa.Lang.translate('surs_genres_description')
+                        name: Lampa.Lang.translate('resurs_genres'),
+                        description: Lampa.Lang.translate('resurs_genres_description')
                     },
                     onChange: function () {
-                        showSelectionMenu('surs_genres', allGenres, 'genre_', 'id', Lampa.Controller.enabled().name);
+                        showSelectionMenu('resurs_genres', allGenres, 'genre_', 'id', Lampa.Controller.enabled().name);
                     }
                 });
 
                 Lampa.SettingsApi.addParam({
-                    component: 'surs',
-                    param: { name: 'surs_global_streaming', type: 'button' },
+                    component: 'resurs',
+                    param: { name: 'resurs_global_streaming', type: 'button' },
                     field: {
-                        name: Lampa.Lang.translate('surs_global_streaming'),
-                        description: Lampa.Lang.translate('surs_global_streaming_description')
+                        name: Lampa.Lang.translate('resurs_global_streaming'),
+                        description: Lampa.Lang.translate('resurs_global_streaming_description')
                     },
                     onChange: function () {
-                        showSelectionMenu('surs_global_streaming', allStreamingServices, 'streaming_', 'id', Lampa.Controller.enabled().name);
+                        showSelectionMenu('resurs_global_streaming', allStreamingServices, 'streaming_', 'id', Lampa.Controller.enabled().name);
                     }
                 });
 
                 Lampa.SettingsApi.addParam({
-                    component: 'surs',
-                    param: { name: 'surs_rus_streaming', type: 'button' },
+                    component: 'resurs',
+                    param: { name: 'resurs_rus_streaming', type: 'button' },
                     field: {
-                        name: Lampa.Lang.translate('surs_rus_streaming'),
-                        description: Lampa.Lang.translate('surs_rus_streaming_description')
+                        name: Lampa.Lang.translate('resurs_rus_streaming'),
+                        description: Lampa.Lang.translate('resurs_rus_streaming_description')
                     },
                     onChange: function () {
-                        showSelectionMenu('surs_rus_streaming', allStreamingServicesRUS, 'streaming_rus_', 'id', Lampa.Controller.enabled().name);
+                        showSelectionMenu('resurs_rus_streaming', allStreamingServicesRUS, 'streaming_rus_', 'id', Lampa.Controller.enabled().name);
                     }
                 });
 
                 Lampa.SettingsApi.addParam({
-                    component: 'surs',
+                    component: 'resurs',
                     param: { name: '', type: 'title' },
-                    field: { name: Lampa.Lang.translate('surs_geo_filters'), description: '' }
+                    field: { name: Lampa.Lang.translate('resurs_geo_filters'), description: '' }
                 });
 
                 Lampa.SettingsApi.addParam({
-                    component: 'surs',
-                    param: { name: 'surs_streaming', type: 'button' },
+                    component: 'resurs',
+                    param: { name: 'resurs_streaming', type: 'button' },
                     field: {
-                        name: Lampa.Lang.translate('surs_streaming'),
-                        description: Lampa.Lang.translate('surs_region_description')
+                        name: Lampa.Lang.translate('resurs_streaming'),
+                        description: Lampa.Lang.translate('resurs_region_description')
                     },
                     onChange: function () { showStreamingSelectionMenu(Lampa.Controller.enabled().name); }
                 });
 
                 function showStreamingSelectionMenu(previousController) {
                     var items = [
-                        { title: Lampa.Lang.translate('surs_global'), id: 'getStreamingServices' },
-                        { title: Lampa.Lang.translate('surs_russian'), id: 'getStreamingServicesRUS' }
+                        { title: Lampa.Lang.translate('resurs_global'), id: 'getStreamingServices' },
+                        { title: Lampa.Lang.translate('resurs_russian'), id: 'getStreamingServicesRUS' }
                     ];
                     var list = items.map(function (item) {
                         return {
@@ -2213,7 +2208,7 @@
                         };
                     });
                     Lampa.Select.show({
-                        title: Lampa.Lang.translate('surs_streaming'),
+                        title: Lampa.Lang.translate('resurs_streaming'),
                         items: list,
                         onBack: function () { Lampa.Controller.toggle(previousController || 'settings'); },
                         onCheck: function (selectedItem) {
@@ -2226,19 +2221,19 @@
                 }
 
                 Lampa.SettingsApi.addParam({
-                    component: 'surs',
-                    param: { name: 'surs_getMoviesByGenre', type: 'button' },
+                    component: 'resurs',
+                    param: { name: 'resurs_getMoviesByGenre', type: 'button' },
                     field: {
-                        name: Lampa.Lang.translate('surs_movies'),
-                        description: Lampa.Lang.translate('surs_region_description')
+                        name: Lampa.Lang.translate('resurs_movies'),
+                        description: Lampa.Lang.translate('resurs_region_description')
                     },
                     onChange: function () { showMoviesByGenreSelectionMenu(Lampa.Controller.enabled().name); }
                 });
 
                 function showMoviesByGenreSelectionMenu(previousController) {
                     var items = [
-                        { title: Lampa.Lang.translate('surs_global'), id: 'getMoviesByGenreGlobal' },
-                        { title: Lampa.Lang.translate('surs_russian'), id: 'getMoviesByGenreRus' }
+                        { title: Lampa.Lang.translate('resurs_global'), id: 'getMoviesByGenreGlobal' },
+                        { title: Lampa.Lang.translate('resurs_russian'), id: 'getMoviesByGenreRus' }
                     ];
                     var list = items.map(function (item) {
                         return {
@@ -2249,7 +2244,7 @@
                         };
                     });
                     Lampa.Select.show({
-                        title: Lampa.Lang.translate('surs_movies'),
+                        title: Lampa.Lang.translate('resurs_movies'),
                         items: list,
                         onBack: function () { Lampa.Controller.toggle(previousController || 'settings'); },
                         onCheck: function (selectedItem) {
@@ -2262,21 +2257,21 @@
                 }
 
                 Lampa.SettingsApi.addParam({
-                    component: 'surs',
-                    param: { name: 'surs_getTVShowsByGenre', type: 'button' },
+                    component: 'resurs',
+                    param: { name: 'resurs_getTVShowsByGenre', type: 'button' },
                     field: {
-                        name: Lampa.Lang.translate('surs_series'),
-                        description: Lampa.Lang.translate('surs_region_description')
+                        name: Lampa.Lang.translate('resurs_series'),
+                        description: Lampa.Lang.translate('resurs_region_description')
                     },
                     onChange: function () { showTVShowsByGenreSelectionMenu(Lampa.Controller.enabled().name); }
                 });
 
                 function showTVShowsByGenreSelectionMenu(previousController) {
                     var items = [
-                        { title: Lampa.Lang.translate('surs_global'), id: 'getTVShowsByGenreGlobal' },
-                        { title: Lampa.Lang.translate('surs_russian'), id: 'getTVShowsByGenreRus' },
-                        { title: Lampa.Lang.translate('surs_korean'), id: 'getTVShowsByGenreKOR' },
-                        { title: Lampa.Lang.translate('surs_turkish'), id: 'getTVShowsByGenreTR' }
+                        { title: Lampa.Lang.translate('resurs_global'), id: 'getTVShowsByGenreGlobal' },
+                        { title: Lampa.Lang.translate('resurs_russian'), id: 'getTVShowsByGenreRus' },
+                        { title: Lampa.Lang.translate('resurs_korean'), id: 'getTVShowsByGenreKOR' },
+                        { title: Lampa.Lang.translate('resurs_turkish'), id: 'getTVShowsByGenreTR' }
                     ];
                     var list = items.map(function (item) {
                         var defaultValue = (item.id === 'getTVShowsByGenreKOR') ? false : true;
@@ -2288,7 +2283,7 @@
                         };
                     });
                     Lampa.Select.show({
-                        title: Lampa.Lang.translate('surs_series'),
+                        title: Lampa.Lang.translate('resurs_series'),
                         items: list,
                         onBack: function () { Lampa.Controller.toggle(previousController || 'settings'); },
                         onCheck: function (selectedItem) {
@@ -2302,19 +2297,19 @@
                 }
 
                 Lampa.SettingsApi.addParam({
-                    component: 'surs',
-                    param: { name: 'surs_getBestContentByGenre', type: 'button' },
+                    component: 'resurs',
+                    param: { name: 'resurs_getBestContentByGenre', type: 'button' },
                     field: {
-                        name: Lampa.Lang.translate('surs_top_all_time'),
-                        description: Lampa.Lang.translate('surs_top_content_description')
+                        name: Lampa.Lang.translate('resurs_top_all_time'),
+                        description: Lampa.Lang.translate('resurs_top_content_description')
                     },
                     onChange: function () { showBestContentByGenreSelectionMenu(Lampa.Controller.enabled().name); }
                 });
 
                 function showBestContentByGenreSelectionMenu(previousController) {
                     var items = [
-                        { title: Lampa.Lang.translate('surs_movies'), id: 'getBestContentByGenreMovie' },
-                        { title: Lampa.Lang.translate('surs_series'), id: 'getBestContentByGenreTV' }
+                        { title: Lampa.Lang.translate('resurs_movies'), id: 'getBestContentByGenreMovie' },
+                        { title: Lampa.Lang.translate('resurs_series'), id: 'getBestContentByGenreTV' }
                     ];
                     var list = items.map(function (item) {
                         return {
@@ -2325,7 +2320,7 @@
                         };
                     });
                     Lampa.Select.show({
-                        title: Lampa.Lang.translate('surs_top_all_time'),
+                        title: Lampa.Lang.translate('resurs_top_all_time'),
                         items: list,
                         onBack: function () { Lampa.Controller.toggle(previousController || 'settings'); },
                         onCheck: function (selectedItem) {
@@ -2338,19 +2333,19 @@
                 }
 
                 Lampa.SettingsApi.addParam({
-                    component: 'surs',
-                    param: { name: 'surs_best_content', type: 'button' },
+                    component: 'resurs',
+                    param: { name: 'resurs_best_content', type: 'button' },
                     field: {
-                        name: Lampa.Lang.translate('surs_top_5_years'),
-                        description: Lampa.Lang.translate('surs_top_content_description')
+                        name: Lampa.Lang.translate('resurs_top_5_years'),
+                        description: Lampa.Lang.translate('resurs_top_content_description')
                     },
                     onChange: function () { showBestContentByPeriodSelectionMenu(Lampa.Controller.enabled().name); }
                 });
 
                 function showBestContentByPeriodSelectionMenu(previousController) {
                     var items = [
-                        { title: Lampa.Lang.translate('surs_movies'), id: 'getBestContentByGenreAndPeriod_movie' },
-                        { title: Lampa.Lang.translate('surs_series'), id: 'getBestContentByGenreAndPeriod_tv' }
+                        { title: Lampa.Lang.translate('resurs_movies'), id: 'getBestContentByGenreAndPeriod_movie' },
+                        { title: Lampa.Lang.translate('resurs_series'), id: 'getBestContentByGenreAndPeriod_tv' }
                     ];
                     var list = items.map(function (item) {
                         return {
@@ -2361,7 +2356,7 @@
                         };
                     });
                     Lampa.Select.show({
-                        title: Lampa.Lang.translate('surs_top_5_years'),
+                        title: Lampa.Lang.translate('resurs_top_5_years'),
                         items: list,
                         onBack: function () { Lampa.Controller.toggle(previousController || 'settings'); },
                         onCheck: function (selectedItem) {
@@ -2374,17 +2369,17 @@
                 }
 
                 Lampa.SettingsApi.addParam({
-                    component: 'surs',
+                    component: 'resurs',
                     param: { name: '', type: 'title' },
-                    field: { name: Lampa.Lang.translate('surs_technical_settings'), description: '' }
+                    field: { name: Lampa.Lang.translate('resurs_technical_settings'), description: '' }
                 });
 
                 Lampa.SettingsApi.addParam({
-                    component: 'surs',
-                    param: { name: 'surs_cirillic', type: 'button' },
+                    component: 'resurs',
+                    param: { name: 'resurs_cirillic', type: 'button' },
                     field: {
-                        name: Lampa.Lang.translate('surs_cyrillic'),
-                        description: Lampa.Lang.translate('surs_cyrillic_description')
+                        name: Lampa.Lang.translate('resurs_cyrillic'),
+                        description: Lampa.Lang.translate('resurs_cyrillic_description')
                     },
                     onChange: function () { showCirillicMenu(Lampa.Controller.enabled().name); }
                 });
@@ -2393,8 +2388,8 @@
                     var key = 'cirillic';
                     var currentValue = getStoredSetting(key, '1');
                     var options = [
-                        { title: Lampa.Lang.translate('surs_cyrillic_enabled'), value: '1' },
-                        { title: Lampa.Lang.translate('surs_cyrillic_disabled'), value: '0' }
+                        { title: Lampa.Lang.translate('resurs_cyrillic_enabled'), value: '1' },
+                        { title: Lampa.Lang.translate('resurs_cyrillic_disabled'), value: '0' }
                     ];
                     var items = options.map(function (opt) {
                         return {
@@ -2405,7 +2400,7 @@
                         };
                     });
                     Lampa.Select.show({
-                        title: Lampa.Lang.translate('surs_cyrillic'),
+                        title: Lampa.Lang.translate('resurs_cyrillic'),
                         items: items,
                         onBack: function () { Lampa.Controller.toggle(previousController || 'settings'); },
                         onCheck: function (selected) {
@@ -2416,11 +2411,11 @@
                 }
 
                 Lampa.SettingsApi.addParam({
-                    component: 'surs',
-                    param: { name: 'surs_minVotes', type: 'button' },
+                    component: 'resurs',
+                    param: { name: 'resurs_minVotes', type: 'button' },
                     field: {
-                        name: Lampa.Lang.translate('surs_rating_validation'),
-                        description: Lampa.Lang.translate('surs_rating_description')
+                        name: Lampa.Lang.translate('resurs_rating_validation'),
+                        description: Lampa.Lang.translate('resurs_rating_description')
                     },
                     onChange: function () { showMinVotesMenu(Lampa.Controller.enabled().name); }
                 });
@@ -2429,11 +2424,11 @@
                     var key = 'minVotes';
                     var currentValue = getStoredSetting(key, '10');
                     var options = [
-                        { title: Lampa.Lang.translate('surs_rating_off'), value: '0' },
-                        { title: Lampa.Lang.translate('surs_rating_standard'), value: '10' },
-                        { title: Lampa.Lang.translate('surs_rating_enhanced'), value: '50' },
-                        { title: Lampa.Lang.translate('surs_rating_maximum'), value: '150' },
-                        { title: Lampa.Lang.translate('surs_rating_fatality'), value: '300' }
+                        { title: Lampa.Lang.translate('resurs_rating_off'), value: '0' },
+                        { title: Lampa.Lang.translate('resurs_rating_standard'), value: '10' },
+                        { title: Lampa.Lang.translate('resurs_rating_enhanced'), value: '50' },
+                        { title: Lampa.Lang.translate('resurs_rating_maximum'), value: '150' },
+                        { title: Lampa.Lang.translate('resurs_rating_fatality'), value: '300' }
                     ];
                     var items = options.map(function (opt) {
                         return {
@@ -2444,7 +2439,7 @@
                         };
                     });
                     Lampa.Select.show({
-                        title: Lampa.Lang.translate('surs_rating_validation'),
+                        title: Lampa.Lang.translate('resurs_rating_validation'),
                         items: items,
                         onBack: function () { Lampa.Controller.toggle(previousController || 'settings'); },
                         onCheck: function (selected) {
@@ -2455,11 +2450,11 @@
                 }
 
                 Lampa.SettingsApi.addParam({
-                    component: 'surs',
-                    param: { name: 'surs_ageRestrictions', type: 'button' },
+                    component: 'resurs',
+                    param: { name: 'resurs_ageRestrictions', type: 'button' },
                     field: {
-                        name: Lampa.Lang.translate('surs_age_restriction'),
-                        description: Lampa.Lang.translate('surs_age_description')
+                        name: Lampa.Lang.translate('resurs_age_restriction'),
+                        description: Lampa.Lang.translate('resurs_age_description')
                     },
                     onChange: function () { showAgeRestrictionsMenu(Lampa.Controller.enabled().name); }
                 });
@@ -2468,10 +2463,10 @@
                     var key = 'ageRestrictions';
                     var currentValue = getStoredSetting(key, '');
                     var options = [
-                        { title: Lampa.Lang.translate('surs_age_toddlers'), value: '0+' },
-                        { title: Lampa.Lang.translate('surs_age_6'), value: '6+' },
-                        { title: Lampa.Lang.translate('surs_age_12'), value: '12+' },
-                        { title: Lampa.Lang.translate('surs_age_none'), value: '' }
+                        { title: Lampa.Lang.translate('resurs_age_toddlers'), value: '0+' },
+                        { title: Lampa.Lang.translate('resurs_age_6'), value: '6+' },
+                        { title: Lampa.Lang.translate('resurs_age_12'), value: '12+' },
+                        { title: Lampa.Lang.translate('resurs_age_none'), value: '' }
                     ];
                     var items = options.map(function (opt) {
                         return {
@@ -2482,7 +2477,7 @@
                         };
                     });
                     Lampa.Select.show({
-                        title: Lampa.Lang.translate('surs_age_restriction'),
+                        title: Lampa.Lang.translate('resurs_age_restriction'),
                         items: items,
                         onBack: function () { Lampa.Controller.toggle(previousController || 'settings'); },
                         onCheck: function (selected) {
@@ -2493,11 +2488,11 @@
                 }
 
                 Lampa.SettingsApi.addParam({
-                    component: 'surs',
-                    param: { name: 'surs_withoutKeywords', type: 'button' },
+                    component: 'resurs',
+                    param: { name: 'resurs_withoutKeywords', type: 'button' },
                     field: {
-                        name: Lampa.Lang.translate('surs_exclude_asian'),
-                        description: Lampa.Lang.translate('surs_exclude_asian_description')
+                        name: Lampa.Lang.translate('resurs_exclude_asian'),
+                        description: Lampa.Lang.translate('resurs_exclude_asian_description')
                     },
                     onChange: function () { showKeywordFilterMenu(Lampa.Controller.enabled().name); }
                 });
@@ -2506,9 +2501,9 @@
                     var key = 'without_keywords';
                     var currentValue = getStoredSetting(key, '1');
                     var options = [
-                        { title: Lampa.Lang.translate('surs_exclude_off'), value: '0' },
-                        { title: Lampa.Lang.translate('surs_exclude_soft'), value: '1' },
-                        { title: Lampa.Lang.translate('surs_exclude_strong'), value: '2' }
+                        { title: Lampa.Lang.translate('resurs_exclude_off'), value: '0' },
+                        { title: Lampa.Lang.translate('resurs_exclude_soft'), value: '1' },
+                        { title: Lampa.Lang.translate('resurs_exclude_strong'), value: '2' }
                     ];
                     var items = options.map(function (opt) {
                         return {
@@ -2519,7 +2514,7 @@
                         };
                     });
                     Lampa.Select.show({
-                        title: Lampa.Lang.translate('surs_exclude_asian'),
+                        title: Lampa.Lang.translate('resurs_exclude_asian'),
                         items: items,
                         onBack: function () { Lampa.Controller.toggle(previousController || 'settings'); },
                         onCheck: function (selectedItem) {
@@ -2529,36 +2524,36 @@
                     });
                 }
 
-                if (!Lampa.Storage.get('surs_disableCustomName')) {
+                if (!Lampa.Storage.get('resurs_disableCustomName')) {
                     Lampa.SettingsApi.addParam({
-                        component: 'surs',
+                        component: 'resurs',
                         param: { name: '', type: 'title' },
-                        field: { name: Lampa.Lang.translate('surs_name'), description: '' }
+                        field: { name: Lampa.Lang.translate('resurs_name'), description: '' }
                     });
 
                     Lampa.SettingsApi.addParam({
-                        component: 'surs',
-                        param: { name: 'surs_setName', type: 'button' },
+                        component: 'resurs',
+                        param: { name: 'resurs_setName', type: 'button' },
                         field: {
-                            name: Lampa.Lang.translate('surs_rename_selections'),
-                            description: Lampa.Lang.translate('surs_rename_description') + ' ' + currentSource
+                            name: Lampa.Lang.translate('resurs_rename_selections'),
+                            description: Lampa.Lang.translate('resurs_rename_description') + ' ' + currentSource
                         },
                         onChange: function () {
-                            var currentName = Lampa.Storage.get('surs_name') || '';
+                            var currentName = Lampa.Storage.get('resurs_name') || '';
                             Lampa.Input.edit({
                                 free: true,
-                                title: Lampa.Lang.translate('surs_enter_new_name'),
+                                title: Lampa.Lang.translate('resurs_enter_new_name'),
                                 value: currentName
                             }, function (newName) {
                                 if (typeof newName === 'string') newName = newName.trim();
                                 if (newName && newName.length > 0) {
-                                    Lampa.Storage.set('surs_name', newName);
-                                    Lampa.Noty.show(Lampa.Lang.translate('surs_name_saved') || 'Название сохранено');
+                                    Lampa.Storage.set('resurs_name', newName);
+                                    Lampa.Noty.show(Lampa.Lang.translate('resurs_name_saved') || 'Название сохранено');
                                     setTimeout(() => Lampa.Controller.toggle('settings'), 300);
                                     setTimeout(() => { try { softRefresh(newName, false); } catch (e) { } }, 2000);
                                     setTimeout(() => location.reload(), 3500);
                                 } else {
-                                    Lampa.Noty.show(Lampa.Lang.translate('surs_name_not_entered') || 'Название не введено');
+                                    Lampa.Noty.show(Lampa.Lang.translate('resurs_name_not_entered') || 'Название не введено');
                                 }
                             });
                         }
@@ -2605,111 +2600,111 @@
 
         // Локализация (только RU)
         Lampa.Lang.add({
-            surs_vote_count_desc: { ru: "Много голосов" },
-            surs_vote_average_desc: { ru: "Высокий рейтинг" },
-            surs_first_air_date_desc: { ru: "Новинки" },
-            surs_popularity_desc: { ru: "Популярные" },
-            surs_revenue_desc: { ru: "Интерес зрителей" },
-            surs_genre_action: { ru: "боевики" },
-            surs_genre_comedy: { ru: "комедии" },
-            surs_genre_drama: { ru: "драмы" },
-            surs_genre_romance: { ru: "мелодрамы" },
-            surs_genre_animation: { ru: "анимация" },
-            surs_genre_kids: { ru: "детское" },
-            surs_genre_adventure: { ru: "приключения" },
-            surs_genre_crime: { ru: "криминал" },
-            surs_genre_mystery: { ru: "детективы" },
-            surs_genre_sci_fi: { ru: "фантастика" },
-            surs_genre_western: { ru: "вестерны" },
-            surs_genre_thriller: { ru: "триллеры" },
-            surs_genre_family: { ru: "семейные" },
-            surs_genre_fantasy: { ru: "фэнтези" },
-            surs_genre_reality: { ru: "реалити-шоу" },
-            surs_genre_action_adventure: { ru: "боевики и приключения" },
-            surs_genre_soap: { ru: "мыльные оперы" },
-            surs_genre_talk_show: { ru: "ток-шоу" },
-            surs_title_trend_week: { ru: "Тренды недели" },
-            surs_title_upcoming_episodes: { ru: "Ближайшие эпизоды" },
-            surs_popular_persons: { ru: "Популярные персоны" },
-            surs_top_movies: { ru: "Топ фильмы" },
-            surs_top_tv: { ru: "Топ сериалы" },
-            surs_for_period: { ru: " за " },
-            surs_noname: { ru: "без названия" },
-            surs_tv_shows: { ru: "сериалы" },
-            surs_on: { ru: "на" },
-            surs_source_name: { ru: "SURS" },
-            surs_source_name_kids: { ru: "SURS KIDS" },
-            surs_source_name_rus: { ru: "SURS RUS" },
-            surs_source_name_new: { ru: "SURS NEW" },
-            surs_collections: { ru: "Главная" },
-            surs_main_update: { ru: "После изменения настроек обновите главную страницу, нажав на её иконку в боковом меню" },
-            surs_from: { ru: "от" },
-            surs_settings_interface: { ru: "Настройка интерфейса" },
-            surs_set_as_source: { ru: "Установить в качестве источника" },
-            surs_source_description: { ru: "Влияет на отображение контента на главной странице" },
-            surs_add_to_menu: { ru: "Добавить подборки в боковое меню" },
-            surs_menu_description: { ru: "Выберите, какие подборки добавить в боковое меню" },
-            surs_select_menu_sources: { ru: "Выбор источников для бокового меню" },
-            surs_filters: { ru: "Фильтры" },
-            surs_sort_types: { ru: "Виды сортировки подборок" },
-            surs_sort_description: { ru: "Выбор сортировки подборок" },
-            surs_genres: { ru: "Жанры" },
-            surs_genres_description: { ru: "Выбор жанров" },
-            surs_global_streaming: { ru: "Глобальные стриминги" },
-            surs_global_streaming_description: { ru: "Выбор глобальных стриминговых сервисов" },
-            surs_rus_streaming: { ru: "Российские стриминги" },
-            surs_rus_streaming_description: { ru: "Выбор российских стриминговых сервисов" },
-            surs_geo_filters: { ru: "Настройки подборок" },
-            surs_streaming: { ru: "Стриминги" },
-            surs_region_description: { ru: "Выберите регион" },
-            surs_movies: { ru: "Фильмы" },
-            surs_series: { ru: "Сериалы" },
-            surs_top_all_time: { ru: "Топ за все время" },
-            surs_top_content_description: { ru: "Фильмы, сериалы, или всё вместе" },
-            surs_top_5_years: { ru: "Топ за 5 лет" },
-            surs_technical_settings: { ru: "Технические настройки" },
-            surs_cyrillic: { ru: "Кириллица в карточке" },
-            surs_cyrillic_description: { ru: "Фильтрует контент, оставляя только те материалы, у которых есть перевод названия или описание на кириллице" },
-            surs_cyrillic_enabled: { ru: "Включен" },
-            surs_cyrillic_disabled: { ru: "Выключен" },
-            surs_rating_validation: { ru: "Валидация рейтинга" },
-            surs_rating_description: { ru: "Позволяет исключить контент с случайно завышенной оценкой. Однако может также исключить новые фильмы или те, у которых ещё нет рейтинга или мало голосов" },
-            surs_rating_off: { ru: "Выключено" },
-            surs_rating_standard: { ru: "Стандартная" },
-            surs_rating_enhanced: { ru: "Усиленная" },
-            surs_rating_maximum: { ru: "Максимальная" },
-            surs_rating_fatality: { ru: "Фаталити" },
-            surs_age_restriction: { ru: "Возрастное ограничение" },
-            surs_age_description: { ru: "Формирует подборки, которые соответствуют указанному возрастному рейтингу" },
-            surs_age_toddlers: { ru: "Для самых маленьких" },
-            surs_age_6: { ru: "Для детей не старше 6 лет" },
-            surs_age_12: { ru: "Для детей не старше 12 лет" },
-            surs_age_none: { ru: "Без ограничений" },
-            surs_exclude_asian: { ru: "Исключение азиатских жанров" },
-            surs_exclude_asian_description: { ru: "Мягкий режим: исключает мангу, маньхву, донхуа. Сильный режим: дополнительно исключает аниме" },
-            surs_exclude_off: { ru: "Выключено" },
-            surs_exclude_soft: { ru: "Мягко" },
-            surs_exclude_strong: { ru: "Сильно" },
-            surs_name: { ru: "Название" },
-            surs_rename_selections: { ru: "Переименование подборок" },
-            surs_rename_description: { ru: "Введите свое название вместо" },
-            surs_enter_new_name: { ru: "Введите новое название" },
-            surs_name_saved: { ru: "Название сохранено. Обновление..." },
-            surs_name_not_entered: { ru: "Название не введено" },
-            surs_global: { ru: "Глобальные" },
-            surs_russian: { ru: "Российские" },
-            surs_korean: { ru: "Южнокорейские" },
-            surs_turkish: { ru: "турецкие" },
-            surs_ukrainian: { ru: "украинские" },
-            surs_custom_buttons: { ru: "Горизонтальное меню" },
-            surs_custom_buttons_description: { ru: "Выберите, какие кнопки отображать в интерфейсе" },
-            surs_main: { ru: "Главная" },
-            surs_bookmarks: { ru: "Избранное" },
-            surs_select: { ru: "Разделы" },
-            surs_new: { ru: "Новинки" },
-            surs_rus: { ru: "Русское" },
-            surs_kids: { ru: "Детское" },
-            surs_history: { ru: "История" }
+            resurs_vote_count_desc: { ru: "Много голосов" },
+            resurs_vote_average_desc: { ru: "Высокий рейтинг" },
+            resurs_first_air_date_desc: { ru: "Новинки" },
+            resurs_popularity_desc: { ru: "Популярные" },
+            resurs_revenue_desc: { ru: "Интерес зрителей" },
+            resurs_genre_action: { ru: "боевики" },
+            resurs_genre_comedy: { ru: "комедии" },
+            resurs_genre_drama: { ru: "драмы" },
+            resurs_genre_romance: { ru: "мелодрамы" },
+            resurs_genre_animation: { ru: "анимация" },
+            resurs_genre_kids: { ru: "детское" },
+            resurs_genre_adventure: { ru: "приключения" },
+            resurs_genre_crime: { ru: "криминал" },
+            resurs_genre_mystery: { ru: "детективы" },
+            resurs_genre_sci_fi: { ru: "фантастика" },
+            resurs_genre_western: { ru: "вестерны" },
+            resurs_genre_thriller: { ru: "триллеры" },
+            resurs_genre_family: { ru: "семейные" },
+            resurs_genre_fantasy: { ru: "фэнтези" },
+            resurs_genre_reality: { ru: "реалити-шоу" },
+            resurs_genre_action_adventure: { ru: "боевики и приключения" },
+            resurs_genre_soap: { ru: "мыльные оперы" },
+            resurs_genre_talk_show: { ru: "ток-шоу" },
+            resurs_title_trend_week: { ru: "Тренды недели" },
+            resurs_title_upcoming_episodes: { ru: "Ближайшие эпизоды" },
+            resurs_popular_persons: { ru: "Популярные персоны" },
+            resurs_top_movies: { ru: "Топ фильмы" },
+            resurs_top_tv: { ru: "Топ сериалы" },
+            resurs_for_period: { ru: " за " },
+            resurs_noname: { ru: "без названия" },
+            resurs_tv_shows: { ru: "сериалы" },
+            resurs_on: { ru: "на" },
+            resurs_source_name: { ru: "reSURS" },
+            resurs_source_name_kids: { ru: "reSURS KIDS" },
+            resurs_source_name_rus: { ru: "reSURS RUS" },
+            resurs_source_name_new: { ru: "reSURS NEW" },
+            resurs_collections: { ru: "Главная" },
+            resurs_main_update: { ru: "После изменения настроек обновите главную страницу, нажав на её иконку в боковом меню" },
+            resurs_from: { ru: "от" },
+            resurs_settings_interface: { ru: "Настройка интерфейса" },
+            resurs_set_as_source: { ru: "Установить в качестве источника" },
+            resurs_source_description: { ru: "Влияет на отображение контента на главной странице" },
+            resurs_add_to_menu: { ru: "Добавить подборки в боковое меню" },
+            resurs_menu_description: { ru: "Выберите, какие подборки добавить в боковое меню" },
+            resurs_select_menu_sources: { ru: "Выбор источников для бокового меню" },
+            resurs_filters: { ru: "Фильтры" },
+            resurs_sort_types: { ru: "Виды сортировки подборок" },
+            resurs_sort_description: { ru: "Выбор сортировки подборок" },
+            resurs_genres: { ru: "Жанры" },
+            resurs_genres_description: { ru: "Выбор жанров" },
+            resurs_global_streaming: { ru: "Глобальные стриминги" },
+            resurs_global_streaming_description: { ru: "Выбор глобальных стриминговых сервисов" },
+            resurs_rus_streaming: { ru: "Российские стриминги" },
+            resurs_rus_streaming_description: { ru: "Выбор российских стриминговых сервисов" },
+            resurs_geo_filters: { ru: "Настройки подборок" },
+            resurs_streaming: { ru: "Стриминги" },
+            resurs_region_description: { ru: "Выберите регион" },
+            resurs_movies: { ru: "Фильмы" },
+            resurs_series: { ru: "Сериалы" },
+            resurs_top_all_time: { ru: "Топ за все время" },
+            resurs_top_content_description: { ru: "Фильмы, сериалы, или всё вместе" },
+            resurs_top_5_years: { ru: "Топ за 5 лет" },
+            resurs_technical_settings: { ru: "Технические настройки" },
+            resurs_cyrillic: { ru: "Кириллица в карточке" },
+            resurs_cyrillic_description: { ru: "Фильтрует контент, оставляя только те материалы, у которых есть перевод названия или описание на кириллице" },
+            resurs_cyrillic_enabled: { ru: "Включен" },
+            resurs_cyrillic_disabled: { ru: "Выключен" },
+            resurs_rating_validation: { ru: "Валидация рейтинга" },
+            resurs_rating_description: { ru: "Позволяет исключить контент с случайно завышенной оценкой. Однако может также исключить новые фильмы или те, у которых ещё нет рейтинга или мало голосов" },
+            resurs_rating_off: { ru: "Выключено" },
+            resurs_rating_standard: { ru: "Стандартная" },
+            resurs_rating_enhanced: { ru: "Усиленная" },
+            resurs_rating_maximum: { ru: "Максимальная" },
+            resurs_rating_fatality: { ru: "Фаталити" },
+            resurs_age_restriction: { ru: "Возрастное ограничение" },
+            resurs_age_description: { ru: "Формирует подборки, которые соответствуют указанному возрастному рейтингу" },
+            resurs_age_toddlers: { ru: "Для самых маленьких" },
+            resurs_age_6: { ru: "Для детей не старше 6 лет" },
+            resurs_age_12: { ru: "Для детей не старше 12 лет" },
+            resurs_age_none: { ru: "Без ограничений" },
+            resurs_exclude_asian: { ru: "Исключение азиатских жанров" },
+            resurs_exclude_asian_description: { ru: "Мягкий режим: исключает мангу, маньхву, донхуа. Сильный режим: дополнительно исключает аниме" },
+            resurs_exclude_off: { ru: "Выключено" },
+            resurs_exclude_soft: { ru: "Мягко" },
+            resurs_exclude_strong: { ru: "Сильно" },
+            resurs_name: { ru: "Название" },
+            resurs_rename_selections: { ru: "Переименование подборок" },
+            resurs_rename_description: { ru: "Введите свое название вместо" },
+            resurs_enter_new_name: { ru: "Введите новое название" },
+            resurs_name_saved: { ru: "Название сохранено. Обновление..." },
+            resurs_name_not_entered: { ru: "Название не введено" },
+            resurs_global: { ru: "Глобальные" },
+            resurs_russian: { ru: "Российские" },
+            resurs_korean: { ru: "Южнокорейские" },
+            resurs_turkish: { ru: "турецкие" },
+            resurs_ukrainian: { ru: "украинские" },
+            resurs_custom_buttons: { ru: "Горизонтальное меню" },
+            resurs_custom_buttons_description: { ru: "Выберите, какие кнопки отображать в интерфейсе" },
+            resurs_main: { ru: "Главная" },
+            resurs_bookmarks: { ru: "Избранное" },
+            resurs_select: { ru: "Разделы" },
+            resurs_new: { ru: "Новинки" },
+            resurs_rus: { ru: "Русское" },
+            resurs_kids: { ru: "Детское" },
+            resurs_history: { ru: "История" }
         });
 
         function loadSidePlugins() {
@@ -2733,7 +2728,7 @@
             addMainButton();
             initCustomButtons();
             loadSidePlugins();
-            if (!Lampa.Storage.get('surs_disableMenu')) addSettingMenu();
+            if (!Lampa.Storage.get('resurs_disableMenu')) addSettingMenu();
         } else {
             Lampa.Listener.follow('app', function (e) {
                 if (e.type == 'ready') {
@@ -2742,12 +2737,12 @@
                     addMainButton();
                     initCustomButtons();
                     loadSidePlugins();
-                    if (!Lampa.Storage.get('surs_disableMenu')) addSettingMenu();
+                    if (!Lampa.Storage.get('resurs_disableMenu')) addSettingMenu();
                 }
             });
         }
     }
 
-    if (!window.plugin_surs_ready) startPlugin();
+    if (!window.plugin_resurs_ready) startPlugin();
 
 })();

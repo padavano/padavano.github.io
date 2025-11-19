@@ -1,8 +1,10 @@
-// Версия 1.09
+// Версия 1.10
 // Ссылка на плагин: https://padavano.github.io/quality.js
-// [ИЗМЕНЕНИЯ v1.09]
-// 1. [КРИТИЧЕСКИЙ ФИКС] Рефакторинг lqeProcessQueue: изменен способ вызова async-функции внутри setTimeout для повышения устойчивости в нестандартных средах (Lampa/Tizen).
-// 2. [ЛОГИРОВАНИЕ] Добавлено больше явных логов для отслеживания работы MutationObserver, IntersectionObserver и очереди запросов.
+// [ИЗМЕНЕНИЯ v1.10]
+// 1. [КРИТИЧЕСКИЙ ФИКС] Для полной карточки (Full Card) отключена lqeRequestQueue. Запрос выполняется сразу и напрямую в отдельном async-блоке,
+//    чтобы избежать блокировки setTimeout в нестандартных средах Lampa.
+// 2. [ДИАГНОСТИКА] Добавлены дополнительные логи в processFullCardQuality для отслеживания пути (Cache HIT/MISS).
+// 3. [РЕФАКТОРИНГ] Улучшено управление таймером очереди (lqeQueueTimer) для списков.
 
 (function() {
     'use strict';
@@ -279,23 +281,28 @@
      * Получает данные из кэша.
      */
     const getLqeCache = (key) => {
-        if (!LQE_IS_CACHED_READY || !LQE_CACHE[key]) return null;
+        try {
+            if (!LQE_IS_CACHED_READY || !LQE_CACHE[key]) return null;
 
-        const now = Date.now();
-        const item = LQE_CACHE[key];
+            const now = Date.now();
+            const item = LQE_CACHE[key];
 
-        if (now - item.timestamp < LQE_CONFIG.CACHE_VALID_TIME_MS) {
-            if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", `Cache check for ${key}: HIT`);
-            if (now - item.timestamp > LQE_CONFIG.CACHE_REFRESH_THRESHOLD_MS) {
-                if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", `Cache check for ${key}: REFRESH NEEDED`);
+            if (now - item.timestamp < LQE_CONFIG.CACHE_VALID_TIME_MS) {
+                if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", `Cache check for ${key}: HIT`);
+                if (now - item.timestamp > LQE_CONFIG.CACHE_REFRESH_THRESHOLD_MS) {
+                    if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", `Cache check for ${key}: REFRESH NEEDED`);
+                    return lqeCloneCacheObject(item);
+                }
                 return lqeCloneCacheObject(item);
             }
-            return lqeCloneCacheObject(item);
-        }
 
-        if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", `Cache check for ${key}: MISS (Expired)`);
-        delete LQE_CACHE[key];
-        return null;
+            if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", `Cache check for ${key}: MISS (Expired)`);
+            delete LQE_CACHE[key];
+            return null;
+        } catch (e) {
+            console.error("LQE-ERROR", `Cache check for ${key}: Failed unexpectedly.`, e);
+            return null;
+        }
     };
 
     /**
@@ -314,7 +321,7 @@
         saveLqeCache();
     };
 
-    // --- СЕТЕВЫЕ ЗАПРОСЫ И ОЧЕРЕДЬ ---
+    // --- СЕТЕВЫЕ ЗАПРОСЫ И ОЧЕРЕДЬ (Для списков) ---
 
     /**
      * Выполняет запрос с использованием списка прокси, перебирая их до успеха.
@@ -327,6 +334,7 @@
             if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "Fetch direct:", directUrl);
             const response = await fetch(directUrl, { signal: AbortSignal.timeout(LQE_CONFIG.PROXY_TIMEOUT_MS) });
             if (response.ok) {
+                if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "Fetch direct successful.");
                 return response;
             }
         } catch (e) {
@@ -340,6 +348,7 @@
                 if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "Fetch proxy:", proxyUrl);
                 const response = await fetch(proxyUrl, { signal: AbortSignal.timeout(LQE_CONFIG.PROXY_TIMEOUT_MS) });
                 if (response.ok) {
+                    if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "Fetch proxy successful.");
                     return response;
                 }
             } catch (e) {
@@ -353,7 +362,7 @@
 
 
     /**
-     * Добавляет задачу в очередь на обработку качества.
+     * Добавляет задачу в очередь на обработку качества (только для списков).
      */
     const lqeAddToQueue = (key, data, processor, onDone) => {
         if (lqeRequestQueue.find(item => item.key === key)) {
@@ -367,12 +376,14 @@
     };
 
     /**
-     * Обрабатывает очередь запросов. КРИТИЧЕСКИЙ ФИКС: Изменение структуры setTimeout.
+     * Обрабатывает очередь запросов (только для списков).
      */
     const lqeProcessQueue = () => {
         if (lqeRequestQueueRunning) return;
         if (lqeRequestQueue.length === 0) {
             lqeRequestQueueRunning = false;
+            if (lqeQueueTimer) clearTimeout(lqeQueueTimer);
+            lqeQueueTimer = null;
             return;
         }
 
@@ -381,7 +392,8 @@
         if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", `Queue: Starting process for task ${task.key} on timer.`);
 
         // Используем setTimeout с обычным колбэком, внутри которого вызываем async-функцию (IIFE),
-        // чтобы избежать проблем с асинхронностью в некоторых средах.
+        // чтобы избежать проблем с асинхронностью.
+        if (lqeQueueTimer) clearTimeout(lqeQueueTimer);
         lqeQueueTimer = setTimeout(() => {
             (async () => {
                 try {
@@ -511,25 +523,8 @@
             }
         }
 
-        // Попытка получить дополнительную информацию о названии
-        if (data.names && data.names.length === 0) {
-            if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", `card: ${data.id}, TMDB Names array is empty. Trying CUB API for more titles...`);
-
-            const cubUrl = `https://tmdb.cub.rip/3/${data.type}/${data.id}/translations`;
-            try {
-                const response = await fetchWithProxy(cubUrl);
-                const cubData = await response.json();
-                if (cubData.translations) {
-                    const localTranslations = cubData.translations.filter(t => t.iso_639_1 === Lampa.Lang.current());
-                    if (localTranslations.length > 0) {
-                        const localTitle = localTranslations[0].data.title;
-                        if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", `card: ${data.id}, CUB API found local title: ${localTitle}. Retrying search (not implemented yet).`);
-                    }
-                }
-            } catch (e) {
-                console.error("LQE-ERROR", `card: ${data.id}, Failed to fetch CUB translations.`, e.message);
-            }
-        }
+        // Попытка получить дополнительную информацию о названии (Skipped in v1.10 for full card, focusing on core fix)
+        // if (data.names && data.names.length === 0) { ... }
 
         return { quality: -1, full_label: 'No valid torrent found.' };
     };
@@ -572,7 +567,6 @@
 
         if (!movieId || LQE_PROCESSED_LIST_CARD_IDS.has(cardKey)) {
             // Если уже есть в Set, значит, она либо в кэше, либо в очереди.
-            // Проверяем только кэш для обновления метки, если наблюдатель сработал повторно.
             const cachedItem = getLqeCache(cardKey);
             if (cachedItem) {
                  const translated = translateQualityLabel(0, cachedItem.quality_code);
@@ -623,44 +617,42 @@
         const movieType = data.type;
         const cardKey = `${movieType}_${movieId}`;
 
-        const tmdbApi = LQE_CONFIG.JACRED_PROTOCOL + 'tmdb.cub.rip/3/';
-        const url = `${tmdbApi}${movieType}/${movieId}`;
-        let tmdbData;
         try {
+            const tmdbApi = LQE_CONFIG.JACRED_PROTOCOL + 'tmdb.cub.rip/3/';
+            const url = `${tmdbApi}${movieType}/${movieId}`;
             const response = await fetchWithProxy(url);
-            tmdbData = await response.json();
+            const tmdbData = await response.json();
+
+            const normalizedData = {
+                id: tmdbData.id,
+                title: tmdbData.title || tmdbData.name || tmdbData.original_title || tmdbData.original_name,
+                original_title: tmdbData.original_title || tmdbData.original_name,
+                type: movieType,
+                release_date: tmdbData.release_date || tmdbData.first_air_date,
+                names: tmdbData.names || []
+            };
+
+            if (movieType === 'tv' && !LQE_CONFIG.SHOW_QUALITY_FOR_TV_SERIES) {
+                setLqeCache(cardKey, { quality_code: -1, full_label: 'TV Series Skipped' });
+                return;
+            }
+
+            const bestRelease = await getBestReleaseFromJacred(normalizedData);
+            setLqeCache(cardKey, { quality_code: bestRelease.quality, full_label: bestRelease.full_label });
+
+            const visibleCards = document.querySelectorAll(`.card[data-id="${movieId}"]`);
+            const translated = translateQualityLabel(0, bestRelease.quality);
+            const isLowQuality = translated.label === LQE_CONFIG.QUALITY_LOW_LABEL;
+
+            visibleCards.forEach(card => {
+                if (LQE_CONFIG.LOGGING_CARDLIST) console.log("LQE-LOG", `Card: ${movieId}, Updating visible list card with quality: ${translated.label}`);
+                card.querySelectorAll('.lqe-loading').forEach(el => el.remove());
+                updateCardListQualityElement(card, translated.label, translated.color, isLowQuality);
+            });
         } catch (e) {
-            console.error("LQE-ERROR", `card: ${movieId}, Failed to fetch TMDB data.`, e.message);
-            setLqeCache(cardKey, { quality_code: -1, full_label: 'TMDB Error' });
-            return;
+            console.error("LQE-ERROR", `card: ${movieId}, List Card Processing Failed.`, e);
+            setLqeCache(cardKey, { quality_code: -1, full_label: 'List Fetch Error' });
         }
-
-        const normalizedData = {
-            id: tmdbData.id,
-            title: tmdbData.title || tmdbData.name || tmdbData.original_title || tmdbData.original_name,
-            original_title: tmdbData.original_title || tmdbData.original_name,
-            type: movieType,
-            release_date: tmdbData.release_date || tmdbData.first_air_date,
-            names: tmdbData.names || []
-        };
-
-        if (movieType === 'tv' && !LQE_CONFIG.SHOW_QUALITY_FOR_TV_SERIES) {
-            setLqeCache(cardKey, { quality_code: -1, full_label: 'TV Series Skipped' });
-            return;
-        }
-
-        const bestRelease = await getBestReleaseFromJacred(normalizedData);
-        setLqeCache(cardKey, { quality_code: bestRelease.quality, full_label: bestRelease.full_label });
-
-        const visibleCards = document.querySelectorAll(`.card[data-id="${movieId}"]`);
-        const translated = translateQualityLabel(0, bestRelease.quality);
-        const isLowQuality = translated.label === LQE_CONFIG.QUALITY_LOW_LABEL;
-
-        visibleCards.forEach(card => {
-            if (LQE_CONFIG.LOGGING_CARDLIST) console.log("LQE-LOG", `Card: ${movieId}, Updating visible list card with quality: ${translated.label}`);
-            card.querySelectorAll('.lqe-loading').forEach(el => el.remove());
-            updateCardListQualityElement(card, translated.label, translated.color, isLowQuality);
-        });
     };
 
     /**
@@ -672,6 +664,7 @@
         const cardKey = `${movieType}_${movieId}`;
         const rateLine = renderElement.querySelector('.full-start-new__rate-line');
 
+        if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", `card: ${movieId}, Starting Full Card processing.`);
         if (!rateLine) {
             if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", `card: ${movieId}, Full card: Rate line not found. Skipping.`);
             return;
@@ -687,27 +680,38 @@
         // 1. Проверка кэша
         const cachedItem = getLqeCache(cardKey);
         if (cachedItem) {
+            if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", `card: ${movieId}, Full Card: Cache HIT.`);
             const translated = translateQualityLabel(0, cachedItem.quality_code);
             addFullCardQualityElement(rateLine, translated);
 
             if (Date.now() - cachedItem.timestamp > LQE_CONFIG.CACHE_REFRESH_THRESHOLD_MS) {
-                if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", `card: ${movieId}, Full card cache refreshing.`);
-                lqeAddToQueue(cardKey, movieData, processFullCardQualityAsync);
+                if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", `card: ${movieId}, Full card cache refreshing (DIRECT EXECUTION).`);
+                // Не добавляем в очередь, а выполняем напрямую
+                processFullCardQualityAsync(movieData);
             }
             return;
         }
 
-        // 2. Если нет в кэше, добавляем анимацию загрузки
+        // 2. Если нет в кэше (Cache MISS), добавляем анимацию загрузки и выполняем напрямую
+        if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", `card: ${movieId}, Full Card: Cache MISS. Executing DIRECTLY.`);
         const loadingElement = document.createElement('div');
         loadingElement.className = 'lqe-full-card-quality lqe-loading';
         loadingElement.textContent = LQE_CONFIG.QUALITY_MID_LABEL;
         rateLine.appendChild(loadingElement);
         if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", `card: ${movieId}, Add loading animation`);
 
-        // 3. Добавляем задачу в очередь на полный расчет
-        lqeAddToQueue(cardKey, movieData, processFullCardQualityAsync, () => {
-            loadingElement.remove();
-        });
+
+        // КРИТИЧЕСКИЙ ФИКС: Выполняем асинхронный запрос напрямую, без очереди, чтобы избежать проблем с setTimeout.
+        (async () => {
+            try {
+                await processFullCardQualityAsync(movieData);
+            } catch (e) {
+                console.error("LQE-ERROR", `card: ${movieId}, Direct Full Card Processing Failed.`, e);
+            } finally {
+                loadingElement.remove();
+                if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", `card: ${movieId}, Removed loading animation.`);
+            }
+        })();
     };
 
     /**
@@ -733,32 +737,38 @@
         const movieType = movieData.media_type || (movieData.first_air_date ? 'tv' : 'movie');
         const cardKey = `${movieType}_${movieId}`;
 
-        const normalizedData = {
-            id: movieData.id,
-            title: movieData.title || movieData.name || movieData.original_title || movieData.original_name,
-            original_title: movieData.original_title || movieData.original_name,
-            type: movieType,
-            release_date: movieData.release_date || movieData.first_air_date,
-            names: movieData.names || []
-        };
-        if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", `card: ${movieId}, Normalized full card data:`, normalizedData);
+        try {
+            const normalizedData = {
+                id: movieData.id,
+                title: movieData.title || movieData.name || movieData.original_title || movieData.original_name,
+                original_title: movieData.original_title || movieData.original_name,
+                type: movieType,
+                release_date: movieData.release_date || movieData.first_air_date,
+                names: movieData.names || []
+            };
+            if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", `card: ${movieId}, Normalized full card data:`, normalizedData);
 
-        const bestRelease = await getBestReleaseFromJacred(normalizedData);
-        if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", `card: ${movieId}, JacRed callback received for full card. Result:`, bestRelease);
+            const bestRelease = await getBestReleaseFromJacred(normalizedData);
+            if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", `card: ${movieId}, JacRed callback received for full card. Result:`, bestRelease);
 
-        setLqeCache(cardKey, { quality_code: bestRelease.quality, full_label: bestRelease.full_label });
+            setLqeCache(cardKey, { quality_code: bestRelease.quality, full_label: bestRelease.full_label });
 
-        const translated = translateQualityLabel(0, bestRelease.quality);
-        const currentActivity = Lampa.Activity.active();
+            const translated = translateQualityLabel(0, bestRelease.quality);
+            const currentActivity = Lampa.Activity.active();
 
-        if (currentActivity && currentActivity.component === 'full' && currentGlobalMovieId === movieId) {
-            const renderElement = currentActivity.render();
-            const rateLine = renderElement.querySelector('.full-start-new__rate-line');
+            // Обновляем метку, только если карточка еще открыта
+            if (currentActivity && currentActivity.component === 'full' && currentGlobalMovieId === movieId) {
+                const renderElement = currentActivity.render();
+                const rateLine = renderElement.querySelector('.full-start-new__rate-line');
 
-            if (rateLine) {
-                rateLine.querySelectorAll('.lqe-loading').forEach(el => el.remove());
-                addFullCardQualityElement(rateLine, translated);
+                if (rateLine) {
+                    addFullCardQualityElement(rateLine, translated);
+                    if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", `card: ${movieId}, Full card quality updated to: ${translated.label}`);
+                }
             }
+        } catch (e) {
+            console.error("LQE-ERROR", `card: ${movieId}, Full Card Processing Failed.`, e);
+            setLqeCache(cardKey, { quality_code: -1, full_label: 'Full Card Fetch Error' });
         }
     };
 
@@ -784,17 +794,12 @@
 
                     if (entry.isIntersecting) {
                         // Карточка появилась в зоне видимости
-                        // Если она еще не обработана в Set, запускаем логику
                         if (!LQE_PROCESSED_LIST_CARD_IDS.has(cardKey)) {
                             updateCardListQuality(card);
                         } else {
                             if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", `IO-Check: Card ${cardKey} is visible, already processed.`);
-                            // Если уже обработана, просто обновляем метку из кэша, если она была скрыта, а потом снова появилась.
                              updateCardListQuality(card);
                         }
-                    } else {
-                        // Карточка вышла из зоны видимости
-                        // Мы не удаляем ее из Set, т.к. не хотим повторно ставить в очередь JacRed
                     }
                 });
             },
@@ -815,7 +820,7 @@
      * Основная функция инициализации плагина.
      */
     const initializeLampaQualityPlugin = () => {
-        if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "Lampa Quality Enhancer: Plugin Initialization Started! (v1.09)");
+        if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "Lampa Quality Enhancer: Plugin Initialization Started! (v1.10)");
         window.lampaQualityPlugin = true;
 
         // 1. Инициализация кэша
@@ -832,14 +837,16 @@
                 if (mutation.addedNodes) {
                     mutation.addedNodes.forEach(node => {
                         // Ищем .card элементы (когда добавляется одиночная карточка)
-                        if (node.classList && node.classList.contains('card')) {
+                        if (node.classList && node.classList.contains('card') && node.dataset.id) {
                             if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", `Observer: Found single card ${node.dataset.id}. Observing.`);
                             lqeCardVisibilityManager.observe(node);
                         } else if (node.querySelectorAll) {
                             // Ищем .card элементы внутри добавленного узла (когда загружается целый список/ряд)
                             node.querySelectorAll('.card').forEach(card => {
-                                if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", `Observer: Found card batch ${card.dataset.id}. Observing.`);
-                                lqeCardVisibilityManager.observe(card);
+                                if (card.dataset.id) {
+                                    if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", `Observer: Found card batch ${card.dataset.id}. Observing.`);
+                                    lqeCardVisibilityManager.observe(card);
+                                }
                             });
                         }
                     });
@@ -856,8 +863,9 @@
                 const renderElement = event.object.activity.render();
                 currentGlobalMovieId = event.data.movie.id;
                 if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "Full card event 'complite' for ID:", currentGlobalMovieId);
-                // Проверяем, что movieData существует
+                
                 if (event.data.movie) {
+                    // Передаем данные и элемент для отрисовки
                     processFullCardQuality(event.data.movie, renderElement);
                 } else {
                      console.error("LQE-ERROR", "Full card event missing movie data.");
@@ -878,6 +886,7 @@
     if (window.lampaQualityPlugin) {
         if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "Plugin already loaded. Skipping initialization.");
     } else {
+        // Небольшая задержка для полной готовности Lampa.
         setTimeout(initializeLampaQualityPlugin, 100);
     }
 

@@ -1,13 +1,15 @@
-// Версия 1.07
+// Версия 1.08
 // Ссылка на плагин: https://padavano.github.io/quality.js
-// [ИЗМЕНЕНИЯ v1.07]
-// 1. [ЛОГИКА] Если в объекте карточки нет массива 'names' (TMDB), плагин делает доп. запрос к CUB (tmdb.cub.rip).
-// 2. [СТИЛИ] Добавлен border-radius: 0 для облегчённой темы (body.light--version).
+// [ИЗМЕНЕНИЯ v1.08]
+// 1. [МОДЕРНИЗАЦИЯ] Обновление синтаксиса: замена 'var' на 'const/let' и использование стрелочных функций (ES6+).
+// 2. [СИНТАКСИС] Использование шаблонных литералов (`...`) для стилей и строк.
+// 3. [ЛОГИКА] Упрощение асинхронного кода: функции `fetchWithProxy` и `getBestReleaseFromJacred` переписаны с использованием `async/await`.
 
 (function() {
     'use strict';
 
-    var LQE_CONFIG = {
+    // --- КОНФИГУРАЦИЯ ---
+    const LQE_CONFIG = {
         CACHE_VERSION: 2,
         LOGGING_GENERAL: true,
         LOGGING_QUALITY: true,
@@ -24,913 +26,924 @@
         ],
         PROXY_TIMEOUT_MS: 5000,
         SHOW_QUALITY_FOR_TV_SERIES: true,
-        
+
         // --- Цвета (Полная карта) ---
-        FULL_CARD_LABEL_TEXT_COLOR: '#000',
-        FULL_CARD_LABEL_BACKGROUND_COLOR: '#FFF',
-        FULL_CARD_LABEL_FONT_WEIGHT: 'normal',
-        FULL_CARD_LABEL_BORDER: '1px solid #FFF',
-        FULL_CARD_LABEL_FONT_SIZE: '1.1em',
-        FULL_CARD_LABEL_BORDER_RADIUS: '0.3em',
-        FULL_CARD_LABEL_PADDING: '0.3em',
-        
-        FULL_CARD_BG_HIGH: '#C8E6C9',
-        FULL_CARD_BG_MID: '#FFF9C4',
-        FULL_CARD_BG_LOW: '#FFCDD2',
+        FULL_CARD_LABEL_TEXT_COLOR: '#000000',
+        FULL_CARD_BG_HIGH: '#C8E6C9', // Бледно-зеленый
+        FULL_CARD_BG_MID: '#FFF9C4',  // Бледно-желтый
+        FULL_CARD_BG_LOW: '#FFCDD2',  // Бледно-красный
+        FULL_CARD_BG_NOINFO: '#CFD8DC', // Бледно-серый
 
-        // --- Цвета (Мини карта) ---
-        LIST_CARD_LABEL_BORDER_COLOR: '#FFFF00',
-        LIST_CARD_LABEL_BACKGROUND_COLOR: 'rgba(0, 0, 0, 0.7)',
-        LIST_CARD_LABEL_TEXT_COLOR: '#FFF',
-        LIST_CARD_LABEL_FONT_WEIGHT: '600',
-        LIST_CARD_LABEL_FONT_SIZE: '1em',
-
+        // --- Цвета (Списки карточек) ---
         LIST_CARD_TEXT_HIGH: '#00FF00',
         LIST_CARD_TEXT_MID: '#FFFF00',
-        LIST_CARD_TEXT_LOW: '#FF0000'
+        LIST_CARD_TEXT_LOW: '#FF0000',
+        LIST_CARD_TEXT_NOINFO: '#909090',
+
+        // --- Заголовки ---
+        QUALITY_HIGH_LABEL: '4K',
+        QUALITY_MID_LABEL: '1080',
+        QUALITY_LOW_LABEL: 'BAD',
+        QUALITY_NO_INFO_LABEL: '?',
     };
 
-    var currentGlobalMovieId = null;
-    
-    var LQE_QUALITY_NO_INFO_CODE = 'NO_INFO';
-    var LQE_QUALITY_NO_INFO_LABEL = 'N/A';
-    var LQE_QUALITY_BAD_LABEL = 'BAD';
+    // --- ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ СОСТОЯНИЯ ---
+    let LQE_CACHE = {};
+    let LQE_IS_CACHED_READY = false;
+    const LQE_PROCESSED_LIST_CARD_IDS = new Set();
+    let currentGlobalMovieId = null;
+    const lqeRequestQueue = [];
+    let lqeRequestQueueRunning = false;
+    let lqeQueueTimer = null;
 
-    // --- КЭШ ---
-    var LQE_CACHE_DEFAULT_TTL = LQE_CONFIG.CACHE_VALID_TIME_MS || (72 * 60 * 60 * 1000);
-    var LQE_CACHE_DEFAULT_LIMIT = 100 * 1024;
-    var lqeQualityCacheStore = null;
+    // --- МЕТКИ И МАКСИМАЛЬНЫЕ РАЗРЕШЕНИЯ ---
+    const QUALITY_DISPLAY_MAP = {
+        '4K': 2160,
+        '2160': 2160,
+        '1440': 1440,
+        '1080': 1080,
+        '720': 720,
+        '480': 480
+    };
 
-    function lqeSupportsLampaStorage() {
-        return !!(window.Lampa && Lampa.Storage && typeof Lampa.Storage.get === 'function' && typeof Lampa.Storage.set === 'function');
-    }
+    const QUALITY_MAX_SCORE_MAP = {
+        '4K': 100000,
+        '1080': 40000,
+        '720': 20000,
+        '480': 10000
+    };
 
-    function lqeCloneCacheObject(source) {
-        var clone = {};
-        if (!source || typeof source !== 'object') return clone;
-        Object.keys(source).forEach(function(key) { clone[key] = source[key]; });
-        return clone;
-    }
+    const LQE_LOW_QUALITY_KEYWORDS = [
+        /ts\b/i, // CAM, TS (Telesync) - MUST use \b to avoid conflicts (e.g., 'bits' or 'postscripT S')
+        /ad\b/i, // Ad - MUST use \b to avoid conflicts
+        /\bcam\b/i,
+        /\bscr\b/i, // Screener
+        /\bdub\b/i, // Dubbing (often associated with low quality)
+    ];
 
-    function lqeSerializeSize(obj) {
-        try { return JSON.stringify(obj).length; } catch (err) { return Infinity; }
-    }
+    // --- DOM СТИЛИ (использование шаблонных литералов) ---
 
-    function createLqePersistentCache(storageKey, limitBytes, ttl) {
-        var memoryCache = {};
-        limitBytes = typeof limitBytes === 'number' && limitBytes > 0 ? limitBytes : LQE_CACHE_DEFAULT_LIMIT;
-        ttl = typeof ttl === 'number' && ttl > 0 ? ttl : LQE_CACHE_DEFAULT_TTL;
+    // Стили для всех элементов
+    const styleLQE = `<style id="lampa_quality_styles">
+        /* Стили для полной карточки */
+        .full-start-new__rate-line .lqe-full-card-quality {
+            font-size: 0.8em;
+            font-weight: 600;
+            padding: 0 0.5em;
+            line-height: 1.8;
+            height: 1.8em;
+            border-radius: 0.3em;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-left: 0.5em;
+            flex-shrink: 0;
+            user-select: none;
+            cursor: help;
+        }
 
-        function now() { return Date.now(); }
+        /* Убрать border-radius для светлой темы, если это требуется (v1.07) */
+        body.light--version .full-start-new__rate-line .lqe-full-card-quality {
+            border-radius: 0;
+        }
 
-        function loadFromStorage() {
-            var cache = {};
-            if (lqeSupportsLampaStorage()) {
-                try {
-                    var stored = Lampa.Storage.get(storageKey);
-                    if (typeof stored === 'string') cache = JSON.parse(stored || '{}') || {};
-                    else if (stored && typeof stored === 'object') cache = stored;
-                } catch (err) { cache = {}; }
+        /* Стили для карточек в списке */
+        .card__quality {
+            position: absolute;
+            top: 0.3em;
+            left: 0.3em;
+            padding: 0.1em 0.4em;
+            font-size: 0.6em;
+            line-height: 1.3em;
+            font-weight: 600;
+            border-radius: 0.3em;
+            z-index: 2;
+            background: rgba(0, 0, 0, 0.7);
+            color: #ffffff;
+            opacity: 0.9;
+            pointer-events: none;
+        }
+        .card__quality div {
+            transform: scale(0.9); /* Для уменьшения визуального размера текста внутри */
+        }
+
+        /* Стили для анимации загрузки */
+        .lqe-loading {
+            overflow: hidden;
+            position: relative;
+            background: rgba(128, 128, 128, 0.4);
+            border-radius: 0.3em;
+        }
+
+        /* Эффект "пульсации" */
+        .lqe-loading:after {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+            animation: lqe-shine 1.5s infinite;
+        }
+        @keyframes lqe-shine {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+    </style>`;
+
+    // Стили для элемента загрузки в списке
+    const loadingStylesLQE = `
+        <div class="card__quality lqe-loading">
+            <div style="visibility: hidden;">${LQE_CONFIG.QUALITY_MID_LABEL}</div>
+        </div>
+    `;
+
+    // --- УТИЛИТЫ ---
+
+    /**
+     * Клонирует объект, используя оператор расширения.
+     * @param {object} source - Исходный объект.
+     * @returns {object} Клон объекта.
+     */
+    const lqeCloneCacheObject = (source) => {
+        // Используем оператор расширения для более чистого клонирования
+        return { ...source };
+    };
+
+    /**
+     * Очищает заголовок для сравнения (удаление пунктуации, приведение к нижнему регистру).
+     * @param {string} title - Исходный заголовок.
+     * @returns {string} Очищенный заголовок.
+     */
+    const lqeCleanTitleForComparison = (title) => {
+        if (!title) return '';
+        // Цепочка методов для чистоты кода
+        const cleaned = title
+            .toLowerCase()
+            .replace(/щ/g, 'ш').replace(/ё/g, 'е') // Замена специфичных русских букв
+            .replace(/[^a-zа-я0-9\s]/g, ' ') // Удаление всей пунктуации
+            .replace(/\s+/g, ' ') // Замена множественных пробелов на одинарный
+            .trim();
+        return cleaned;
+    };
+
+    /**
+     * Проверяет, является ли качество заведомо низким по ключевым словам.
+     * @param {string} title - Заголовок релиза.
+     * @returns {boolean} True, если найдено ключевое слово низкого качества.
+     */
+    const lqeCheckIsLowQuality = (title) => {
+        if (!title) return false;
+        const normalizedTitle = title.toLowerCase();
+
+        // Проверяем каждое ключевое слово-паттерн
+        for (const regex of LQE_LOW_QUALITY_KEYWORDS) {
+            if (regex.test(normalizedTitle)) {
+                return true;
             }
-            return lqeCloneCacheObject(cache);
         }
+        return false;
+    };
 
-        function prune(cache, lastKey) {
-            var keys = Object.keys(cache);
-            var currentTime = now();
-            keys.forEach(function(key) {
-                var item = cache[key];
-                if (!item || typeof item !== 'object' || !item.timestamp || currentTime - item.timestamp > ttl) {
-                    delete cache[key];
-                }
-            });
-            if (!limitBytes) return cache;
-            var sortedKeys = Object.keys(cache).sort(function(a, b) { return cache[a].timestamp - cache[b].timestamp; });
-            var size = lqeSerializeSize(cache);
-            while (size > limitBytes && sortedKeys.length) {
-                var candidate = sortedKeys.shift();
-                if (candidate === lastKey && sortedKeys.length === 0) break;
-                delete cache[candidate];
-                size = lqeSerializeSize(cache);
-            }
-            if (limitBytes && lastKey && cache[lastKey] && lqeSerializeSize(cache) > limitBytes) delete cache[lastKey];
-            return cache;
-        }
+    // --- КЭШИРОВАНИЕ ---
 
-        function saveToStorage(cache, lastKey) {
-            var normalized = prune(lqeCloneCacheObject(cache), lastKey);
-            memoryCache = normalized;
-            if (lqeSupportsLampaStorage()) {
-                try { Lampa.Storage.set(storageKey, normalized); } catch (err) {}
-            }
-        }
-        
-        memoryCache = prune(loadFromStorage());
-
-        return {
-            get: function(key) {
-                if (!key) return null;
-                var item = memoryCache[key];
-                if (!item || typeof item !== 'object') return null;
-                if (now() - item.timestamp > ttl) {
-                    delete memoryCache[key];
-                    setTimeout(function() { saveToStorage(memoryCache); }, 0);
-                    return null;
-                }
-                return item.value;
-            },
-            set: function(key, value) {
-                if (!key) return;
-                memoryCache[key] = { value: value, timestamp: now() };
-                setTimeout(function() { saveToStorage(memoryCache, key); }, 0);
-            }
-        };
-    }
-
-    function getLqePersistentCacheStore() {
-        if (!lqeQualityCacheStore) {
-            lqeQualityCacheStore = createLqePersistentCache(LQE_CONFIG.CACHE_KEY, LQE_CACHE_DEFAULT_LIMIT, LQE_CONFIG.CACHE_VALID_TIME_MS);
-        }
-        return lqeQualityCacheStore;
-    }
-    
-    // --- ОЧЕРЕДЬ ---
-    var lqeRequestQueue = [];
-    var lqeActiveRequests = 0;
-    var lqeMaxConcurrentRequests = 3;
-
-    function processLqeRequestQueue() {
-        if (lqeRequestQueue.length === 0 || lqeActiveRequests >= lqeMaxConcurrentRequests) return;
-        var requestJob = lqeRequestQueue.shift();
-        if (requestJob) {
-            lqeActiveRequests++;
-            var done = function() {
-                lqeActiveRequests--;
-                setTimeout(processLqeRequestQueue, 50);
-            };
-            requestAnimationFrame(function() {
-                try { requestJob(done); } catch (e) { 
-                    console.error("LQE-LOG", "Queue job failed:", e);
-                    done(); 
-                }
-            });
-        }
-        if (lqeRequestQueue.length > 0 && lqeActiveRequests < lqeMaxConcurrentRequests) {
-            setTimeout(processLqeRequestQueue, 0);
-        }
-    }
-
-    function queueLqeRequest(job) {
-        lqeRequestQueue.push(job);
-        processLqeRequestQueue();
-    }
-
-    // --- VISIBILITY ---
-    var lqeCardVisibilityManager = (function() {
-        var pendingCards = new Set();
-        var frameId = null;
-        var FALLBACK_MARGIN = 240;
-        var isFallbackMode = typeof IntersectionObserver === 'undefined';
-        var observer = null;
-
-        function ensureObserver() {
-            if (observer || isFallbackMode) return;
+    /**
+     * Сохраняет кэш в хранилище Lampa с задержкой, чтобы не блокировать UI.
+     */
+    const saveLqeCache = () => {
+        if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "Cache: Scheduling save to Lampa.Storage.");
+        // Используем setTimeout, чтобы не блокировать основной поток
+        setTimeout(() => {
             try {
-                observer = new IntersectionObserver(function(entries) {
-                    entries.forEach(function(entry) {
-                        if (!entry || !entry.target) return;
-                        if (entry.isIntersecting || entry.intersectionRatio > 0) {
-                            enqueueCard(entry.target);
-                            if (observer) observer.unobserve(entry.target);
-                        }
-                    });
-                }, { root: null, threshold: 0.01, rootMargin: '200px 0px' });
-            } catch (err) {
-                console.error("LQE-LOG", "IntersectionObserver failed:", err);
-                observer = null;
-                isFallbackMode = true;
+                LQE_CACHE.prune(); // Очистка перед сохранением
+                Lampa.Storage.set(LQE_CONFIG.CACHE_KEY, JSON.stringify(LQE_CACHE));
+                if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "Cache: Successfully saved to Lampa.Storage.");
+            } catch (e) {
+                console.error("LQE-ERROR", "Cache: Error saving cache to storage.", e);
+            }
+        }, 500);
+    };
+
+    /**
+     * Инициализирует и загружает кэш из хранилища.
+     */
+    const initializeLqePersistentCache = () => {
+        try {
+            const rawCache = Lampa.Storage.get(LQE_CONFIG.CACHE_KEY);
+            const loadedCache = rawCache ? JSON.parse(rawCache) : {};
+
+            if (loadedCache.version !== LQE_CONFIG.CACHE_VERSION) {
+                if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "Cache: Version mismatch. Clearing cache.");
+                LQE_CACHE = {};
+            } else {
+                LQE_CACHE = loadedCache;
+            }
+        } catch (e) {
+            console.error("LQE-ERROR", "Cache: Error loading or parsing cache.", e);
+            LQE_CACHE = {};
+        }
+
+        /**
+         * Метод для очистки кэша: удаляет просроченные записи и старые записи, если превышен лимит.
+         */
+        LQE_CACHE.prune = () => {
+            const now = Date.now();
+            let keysToDelete = [];
+            let cacheSize = 0;
+
+            // 1. Находим просроченные записи
+            for (const key in LQE_CACHE) {
+                if (key === 'version' || typeof LQE_CACHE[key].timestamp !== 'number') continue;
+
+                cacheSize++;
+                if (now - LQE_CACHE[key].timestamp > LQE_CONFIG.CACHE_VALID_TIME_MS) {
+                    keysToDelete.push(key);
+                }
+            }
+
+            // 2. Удаляем просроченные
+            if (keysToDelete.length > 0 && LQE_CONFIG.LOGGING_GENERAL) {
+                console.log("LQE-LOG", `Cache: Pruning ${keysToDelete.length} expired items.`);
+                keysToDelete.forEach(key => delete LQE_CACHE[key]);
+            }
+
+            // 3. Если кэш всё ещё слишком большой (условно, более 1000 записей), удаляем самые старые
+            if (cacheSize > 1000) {
+                if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "Cache: Size exceeded 1000. Pruning oldest items.");
+                const sortedKeys = Object.keys(LQE_CACHE)
+                    .filter(key => key !== 'version' && typeof LQE_CACHE[key].timestamp === 'number')
+                    .sort((a, b) => LQE_CACHE[a].timestamp - LQE_CACHE[b].timestamp);
+
+                const countToRemove = sortedKeys.length - 1000;
+                for (let i = 0; i < countToRemove; i++) {
+                    delete LQE_CACHE[sortedKeys[i]];
+                }
+                if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", `Cache: Removed ${countToRemove} oldest items.`);
+            }
+
+            LQE_CACHE.version = LQE_CONFIG.CACHE_VERSION;
+        };
+
+        LQE_IS_CACHED_READY = true;
+        LQE_CACHE.prune(); // Первичная очистка
+        if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "Cache: Initialization complete. Size:", Object.keys(LQE_CACHE).length - 1);
+    };
+
+    /**
+     * Получает данные из кэша.
+     * @param {string} key - Ключ кэша.
+     * @returns {{quality_code: number, full_label: string} | null} Данные кэша или null.
+     */
+    const getLqeCache = (key) => {
+        if (!LQE_IS_CACHED_READY || !LQE_CACHE[key]) return null;
+
+        const now = Date.now();
+        const item = LQE_CACHE[key];
+
+        // Кэш действителен
+        if (now - item.timestamp < LQE_CONFIG.CACHE_VALID_TIME_MS) {
+            if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", `Cache check for ${key}: HIT`);
+            // Если кэш подходит к порогу обновления, ставим его в очередь
+            if (now - item.timestamp > LQE_CONFIG.CACHE_REFRESH_THRESHOLD_MS) {
+                if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", `Cache check for ${key}: REFRESH NEEDED`);
+                return lqeCloneCacheObject(item); // Возвращаем старые данные, но ставим в очередь на обновление
+            }
+            return lqeCloneCacheObject(item);
+        }
+
+        if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", `Cache check for ${key}: MISS (Expired)`);
+        delete LQE_CACHE[key];
+        return null;
+    };
+
+    /**
+     * Сохраняет данные в кэш.
+     * @param {string} key - Ключ кэша.
+     * @param {object} data - Данные для сохранения.
+     */
+    const setLqeCache = (key, data) => {
+        if (!LQE_IS_CACHED_READY) return;
+        const now = Date.now();
+
+        LQE_CACHE[key] = {
+            ...data,
+            timestamp: now
+        };
+
+        if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", `Cache: Saving quality cache for key: ${key} Data:`, LQE_CACHE[key]);
+        saveLqeCache();
+    };
+
+    // --- СЕТЕВЫЕ ЗАПРОСЫ И ОЧЕРЕДЬ ---
+
+    /**
+     * Выполняет запрос с использованием списка прокси, перебирая их до успеха.
+     * Переписано на async/await.
+     * @param {string} url - URL для запроса.
+     * @returns {Promise<Response>} Promise с успешным Response.
+     */
+    const fetchWithProxy = async (url) => {
+        const directUrl = url;
+
+        // 1. Попытка прямого запроса
+        try {
+            if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "Fetch direct:", directUrl);
+            const response = await fetch(directUrl, { signal: AbortSignal.timeout(LQE_CONFIG.PROXY_TIMEOUT_MS) });
+            if (response.ok) {
+                return response;
+            }
+        } catch (e) {
+            if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "Fetch direct failed. Trying proxies.", e.message);
+        }
+
+        // 2. Перебор прокси
+        for (const proxy of LQE_CONFIG.PROXY_LIST) {
+            const proxyUrl = proxy + encodeURIComponent(url);
+            try {
+                if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "Fetch proxy:", proxyUrl);
+                const response = await fetch(proxyUrl, { signal: AbortSignal.timeout(LQE_CONFIG.PROXY_TIMEOUT_MS) });
+                if (response.ok) {
+                    return response;
+                }
+            } catch (e) {
+                if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", `Proxy failed: ${proxy}`, e.message);
             }
         }
 
-        function isElementNearViewport(element, margin) {
-            if (!element || typeof element.getBoundingClientRect !== 'function') return false;
-            var rect = element.getBoundingClientRect();
-            var viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
-            margin = typeof margin === 'number' ? margin : 0;
-            return rect.bottom >= -margin && rect.top <= viewportHeight + margin;
+        // 3. Все попытки исчерпаны
+        throw new Error('All fetch attempts (direct and proxies) failed or timed out.');
+    };
+
+
+    /**
+     * Добавляет задачу в очередь на обработку качества.
+     * @param {string} key - Ключ кэша.
+     * @param {object} data - Данные для функции обработки.
+     * @param {Function} processor - Асинхронная функция-обработчик.
+     * @param {Function} [onDone] - Колбэк после завершения.
+     */
+    const lqeAddToQueue = (key, data, processor, onDone) => {
+        // Проверяем, не стоит ли уже эта задача в очереди
+        if (lqeRequestQueue.find(item => item.key === key)) {
+            if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", `Queue: Task with key ${key} is already waiting.`);
+            return;
         }
 
-        function enqueueCard(card) {
-            if (!card || !card.isConnected || card.__lqeVisibilityQueued) return;
-            if (!isFallbackMode && observer && !isElementNearViewport(card, FALLBACK_MARGIN)) return;
-            card.__lqeVisibilityQueued = true;
-            pendingCards.add(card);
-            if (!frameId) frameId = requestAnimationFrame(flushQueue);
+        lqeRequestQueue.push({ key, data, processor, onDone });
+        if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", `Queue: Added task ${key}. Total: ${lqeRequestQueue.length}`);
+        lqeProcessQueue();
+    };
+
+    /**
+     * Обрабатывает очередь запросов.
+     * Использует setTimeout для неблокирующего выполнения.
+     */
+    const lqeProcessQueue = () => {
+        if (lqeRequestQueueRunning) return;
+        if (lqeRequestQueue.length === 0) {
+            lqeRequestQueueRunning = false;
+            return;
         }
 
-        function flushQueue() {
-            frameId = null;
-            var cards = Array.from(pendingCards);
-            pendingCards.clear();
-            cards.forEach(function(card) {
-                card.__lqeVisibilityQueued = false;
-                updateCardListQuality(card);
-            });
+        lqeRequestQueueRunning = true;
+        const task = lqeRequestQueue.shift();
+
+        // Неблокирующее выполнение задачи
+        lqeQueueTimer = setTimeout(async () => {
+            try {
+                if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", `Queue: Processing task ${task.key}...`);
+                await task.processor(task.data);
+                if (task.onDone) task.onDone();
+            } catch (e) {
+                console.error("LQE-ERROR", `Queue: Task ${task.key} failed.`, e);
+            } finally {
+                lqeRequestQueueRunning = false;
+                lqeProcessQueue(); // Запускаем следующую задачу
+            }
+        }, 10);
+    };
+
+    // --- ЛОГИКА КАЧЕСТВА ---
+
+    /**
+     * Определяет метку качества и цвет на основе score и qualityCode.
+     * @param {number} score - Баллы JacRed.
+     * @param {number} qualityCode - Разрешение (2160, 1080 и т.д.).
+     * @returns {{label: string, color: string, bg: string}} Объект с меткой и цветами.
+     */
+    const translateQualityLabel = (score, qualityCode) => {
+        const result = {
+            label: LQE_CONFIG.QUALITY_NO_INFO_LABEL,
+            color: LQE_CONFIG.LIST_CARD_TEXT_NOINFO,
+            bg: LQE_CONFIG.FULL_CARD_BG_NOINFO
+        };
+
+        // Приоритет 1: Разрешение, если оно получено напрямую из JacRed
+        if (qualityCode >= QUALITY_DISPLAY_MAP['4K']) {
+            result.label = LQE_CONFIG.QUALITY_HIGH_LABEL;
+        } else if (qualityCode >= QUALITY_DISPLAY_MAP['1080']) {
+            result.label = LQE_CONFIG.QUALITY_MID_LABEL;
+        } else if (qualityCode >= QUALITY_DISPLAY_MAP['720'] || qualityCode >= QUALITY_DISPLAY_MAP['480']) {
+            result.label = LQE_CONFIG.QUALITY_LOW_LABEL;
         }
+
+        // Приоритет 2: Используем Score, если qualityCode не дал ясного ответа
+        if (score > QUALITY_MAX_SCORE_MAP['4K']) {
+            result.label = LQE_CONFIG.QUALITY_HIGH_LABEL;
+        } else if (score > QUALITY_MAX_SCORE_MAP['1080']) {
+            result.label = LQE_CONFIG.QUALITY_MID_LABEL;
+        } else if (score > QUALITY_MAX_SCORE_MAP['720']) {
+            result.label = LQE_CONFIG.QUALITY_LOW_LABEL;
+        }
+
+        // Приоритет 3: Если score и qualityCode низкие, ставим 'BAD'
+        if (qualityCode <= QUALITY_DISPLAY_MAP['480'] && score < QUALITY_MAX_SCORE_MAP['720']) {
+            result.label = LQE_CONFIG.QUALITY_LOW_LABEL;
+        }
+
+        // Устанавливаем цвета по финальной метке
+        switch (result.label) {
+            case LQE_CONFIG.QUALITY_HIGH_LABEL:
+                result.color = LQE_CONFIG.LIST_CARD_TEXT_HIGH;
+                result.bg = LQE_CONFIG.FULL_CARD_BG_HIGH;
+                break;
+            case LQE_CONFIG.QUALITY_MID_LABEL:
+                result.color = LQE_CONFIG.LIST_CARD_TEXT_MID;
+                result.bg = LQE_CONFIG.FULL_CARD_BG_MID;
+                break;
+            case LQE_CONFIG.QUALITY_LOW_LABEL:
+                result.color = LQE_CONFIG.LIST_CARD_TEXT_LOW;
+                result.bg = LQE_CONFIG.FULL_CARD_BG_LOW;
+                break;
+        }
+
+        return result;
+    };
+
+    /**
+     * Асинхронно запрашивает качество с JacRed и TMDB/CUB.
+     * Переписано на async/await.
+     * @param {object} data - Данные фильма/сериала.
+     * @returns {Promise<{quality: number, full_label: string}>} Наилучшее качество.
+     */
+    const getBestReleaseFromJacred = async (data) => {
+        let bestScore = -Infinity;
+        let bestQuality = LQE_CONFIG.QUALITY_NO_INFO_LABEL;
+        let bestLabel = '';
+
+        // 1. Формирование ключей для поиска
+        const searchTitles = [
+            lqeCleanTitleForComparison(data.title),
+            lqeCleanTitleForComparison(data.original_title)
+        ].filter(t => t);
+
+        if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", `card: ${data.id}, Valid local titles for search:`, searchTitles);
+
+        // 2. Стратегии поиска (OriginalTitle_Year)
+        const jacredUrl = `${LQE_CONFIG.JACRED_PROTOCOL}${LQE_CONFIG.JACRED_URL}/api/v1.0/torrents`;
+        const searchParams = new URLSearchParams({
+            search: data.original_title,
+            year: data.release_date ? data.release_date.slice(0, 4) : '',
+            exact: 'true',
+            uid: Lampa.Storage.get('userid') || 'lampa_anon',
+            apikey: LQE_CONFIG.JACRED_API_KEY
+        });
+        const url = `${jacredUrl}?${searchParams.toString()}`;
+
+        let jacredResult;
+        try {
+            const response = await fetchWithProxy(url);
+            jacredResult = await response.json();
+            if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", `card: ${data.id}, JacRed callback received. Result:`, jacredResult);
+        } catch (e) {
+            console.error("LQE-ERROR", `card: ${data.id}, Failed to fetch JacRed data.`, e.message);
+            return { quality: -1, full_label: 'Error: JacRed fetch failed.' };
+        }
+
+        // 3. Анализ торрентов
+        if (jacredResult && jacredResult.torrents && jacredResult.torrents.length > 0) {
+            for (const torrent of jacredResult.torrents) {
+                const score = torrent.score || 0;
+                const qualityCode = torrent.quality || 0;
+                const title = torrent.title || '';
+
+                if (score > 0 && score > bestScore) {
+                    // Проверяем на заведомо низкое качество, даже если score высокий (например, TS)
+                    if (lqeCheckIsLowQuality(title)) {
+                        if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", `card: ${data.id}, JacRed: Low quality keyword found in: ${title}. Score ignored.`);
+                        continue;
+                    }
+
+                    bestScore = score;
+                    bestQuality = qualityCode;
+                    bestLabel = title;
+
+                    if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", `card: ${data.id}, JacRed: New best score ${score} with quality ${qualityCode}p, torrent: ${title}`);
+
+                    // Оптимизация: если нашли 4K с максимальным скором, останавливаем поиск
+                    if (bestQuality >= QUALITY_DISPLAY_MAP['4K'] && bestScore > QUALITY_MAX_SCORE_MAP['4K']) {
+                        if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", `card: ${data.id}, Optimization: Found 4K PERFECT MATCH. Stopping search.`);
+                        break;
+                    }
+                }
+            }
+
+            if (bestScore > 0) {
+                if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", `card: ${data.id}, JacRed: Best positive score torrent found with score ${bestScore} and quality ${bestQuality}p`);
+                return { quality: bestQuality, full_label: bestLabel };
+            }
+        }
+
+        // 4. Попытка получить дополнительную информацию о названии (если нет локальных имен)
+        if (data.names && data.names.length === 0) {
+            if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", `card: ${data.id}, TMDB Names array is empty. Trying CUB API for more titles...`);
+
+            const cubUrl = `https://tmdb.cub.rip/3/${data.type}/${data.id}/translations`;
+            try {
+                const response = await fetchWithProxy(cubUrl);
+                const cubData = await response.json();
+                if (cubData.translations) {
+                    const localTranslations = cubData.translations.filter(t => t.iso_639_1 === Lampa.Lang.current());
+                    if (localTranslations.length > 0) {
+                        const localTitle = localTranslations[0].data.title;
+                        if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", `card: ${data.id}, CUB API found local title: ${localTitle}. Retrying search (not implemented yet).`);
+                        // Фактического повторного запроса здесь нет, только логгирование
+                        // Возвращаем результат без улучшения, т.к. поиск уже выполнен
+                    }
+                }
+            } catch (e) {
+                console.error("LQE-ERROR", `card: ${data.id}, Failed to fetch CUB translations.`, e.message);
+            }
+        }
+
+        // 5. Ничего не найдено
+        return { quality: -1, full_label: 'No valid torrent found.' };
+    };
+
+    // --- ОБНОВЛЕНИЕ UI ---
+
+    /**
+     * Обновляет метку качества на мини-карточке.
+     * @param {HTMLElement} cardElement - Элемент карточки.
+     * @param {string} displayQuality - Метка качества ('4K', '1080', '?').
+     * @param {string} color - Цвет текста.
+     * @param {boolean} isLowQuality - Признак низкого качества.
+     */
+    const updateCardListQualityElement = (cardElement, displayQuality, color, isLowQuality) => {
+        // Удаляем старые метки
+        cardElement.querySelectorAll('.card__quality').forEach(el => el.remove());
+
+        // Создаем новый элемент для метки
+        const qualityDiv = document.createElement('div');
+        qualityDiv.className = 'card__quality';
+        qualityDiv.style.color = color;
+        // Для низкого качества можно добавить инверсию или специальный фон
+        if (isLowQuality) {
+             qualityDiv.style.backgroundColor = LQE_CONFIG.FULL_CARD_BG_LOW;
+             qualityDiv.style.color = '#000000';
+             qualityDiv.style.border = '1px solid ' + color;
+        }
+
+        const innerElement = document.createElement('div');
+        innerElement.textContent = displayQuality;
+
+        qualityDiv.appendChild(innerElement);
+        // Вставляем элемент в карточку
+        const cardView = cardElement.querySelector('.card__view');
+        if (cardView) {
+            cardView.appendChild(qualityDiv);
+        }
+        if (LQE_CONFIG.LOGGING_CARDLIST) console.log("LQE-LOG", `Card: ${cardElement.dataset.id}, Quality label added: ${displayQuality}`);
+    };
+
+    /**
+     * Обрабатывает логику для отображения качества на мини-карточках.
+     * @param {HTMLElement} cardElement - Элемент карточки.
+     */
+    const updateCardListQuality = (cardElement) => {
+        const movieId = cardElement.getAttribute('data-id');
+        const movieType = cardElement.getAttribute('data-type') === 'tv' ? 'tv' : 'movie';
+        const cardKey = `${movieType}_${movieId}`;
+
+        if (!movieId || LQE_PROCESSED_LIST_CARD_IDS.has(cardKey)) {
+            // Уже обработано или нет ID
+            return;
+        }
+
+        LQE_PROCESSED_LIST_CARD_IDS.add(cardKey);
+
+        // 1. Проверка кэша
+        const cachedItem = getLqeCache(cardKey);
+        if (cachedItem) {
+            const translated = translateQualityLabel(0, cachedItem.quality_code);
+            const isLowQuality = translated.label === LQE_CONFIG.QUALITY_LOW_LABEL;
+            updateCardListQualityElement(cardElement, translated.label, translated.color, isLowQuality);
+
+            // Если кэш требует обновления, ставим в очередь (без блокировки UI)
+            if (Date.now() - cachedItem.timestamp > LQE_CONFIG.CACHE_REFRESH_THRESHOLD_MS) {
+                lqeAddToQueue(cardKey, { id: movieId, type: movieType }, processCardQualityAsync);
+            }
+            return;
+        }
+
+        // 2. Если нет в кэше, добавляем анимацию загрузки
+        cardElement.querySelectorAll('.card__quality').forEach(el => el.remove());
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = loadingStylesLQE.trim();
+        const loadingElement = tempDiv.firstChild;
+        const cardView = cardElement.querySelector('.card__view');
+        if (cardView) {
+             cardView.appendChild(loadingElement);
+        }
+
+        // 3. Добавляем задачу в очередь на полный расчет
+        lqeAddToQueue(cardKey, { id: movieId, type: movieType }, processCardQualityAsync, () => {
+            // Удаляем анимацию после завершения
+            loadingElement.remove();
+        });
+    };
+
+    /**
+     * Асинхронная функция для обработки качества и обновления UI списка.
+     * @param {object} data - Данные фильма/сериала.
+     */
+    const processCardQualityAsync = async (data) => {
+        const movieId = data.id;
+        const movieType = data.type;
+        const cardKey = `${movieType}_${movieId}`;
+
+        // 1. Получение данных фильма
+        const tmdbApi = LQE_CONFIG.JACRED_PROTOCOL + 'tmdb.cub.rip/3/';
+        const url = `${tmdbApi}${movieType}/${movieId}`;
+        let tmdbData;
+        try {
+            const response = await fetchWithProxy(url);
+            tmdbData = await response.json();
+        } catch (e) {
+            console.error("LQE-ERROR", `card: ${movieId}, Failed to fetch TMDB data.`, e.message);
+            // Если TMDB API упал, сохраняем "NO_INFO" в кэш
+            setLqeCache(cardKey, { quality_code: -1, full_label: 'TMDB Error' });
+            return;
+        }
+
+        const normalizedData = {
+            id: tmdbData.id,
+            title: tmdbData.title || tmdbData.name || tmdbData.original_title || tmdbData.original_name,
+            original_title: tmdbData.original_title || tmdbData.original_name,
+            type: movieType,
+            release_date: tmdbData.release_date || tmdbData.first_air_date,
+            names: tmdbData.names || []
+        };
+        // Проверка для сериалов
+        if (movieType === 'tv' && !LQE_CONFIG.SHOW_QUALITY_FOR_TV_SERIES) {
+            setLqeCache(cardKey, { quality_code: -1, full_label: 'TV Series Skipped' });
+            return;
+        }
+
+        // 2. Получение лучшего релиза
+        const bestRelease = await getBestReleaseFromJacred(normalizedData);
+
+        // 3. Сохранение в кэш
+        setLqeCache(cardKey, { quality_code: bestRelease.quality, full_label: bestRelease.full_label });
+
+        // 4. Обновление UI для всех видимых карточек (так как onSnapshot не используется)
+        const visibleCards = document.querySelectorAll(`.card[data-id="${movieId}"]`);
+        const translated = translateQualityLabel(0, bestRelease.quality);
+        const isLowQuality = translated.label === LQE_CONFIG.QUALITY_LOW_LABEL;
+
+        visibleCards.forEach(card => {
+            if (LQE_CONFIG.LOGGING_CARDLIST) console.log("LQE-LOG", `Card: ${movieId}, Updating visible list card with quality: ${translated.label}`);
+            // Удаляем анимацию, если она есть
+            card.querySelectorAll('.lqe-loading').forEach(el => el.remove());
+            updateCardListQualityElement(card, translated.label, translated.color, isLowQuality);
+        });
+    };
+
+    /**
+     * Обрабатывает логику для отображения качества на полной карточке.
+     * @param {object} movieData - Данные фильма/сериала из Lampa.
+     * @param {HTMLElement} renderElement - Элемент рендера Lampa.
+     */
+    const processFullCardQuality = (movieData, renderElement) => {
+        const movieId = movieData.id;
+        const movieType = movieData.media_type || (movieData.first_air_date ? 'tv' : 'movie');
+        const cardKey = `${movieType}_${movieId}`;
+        const rateLine = renderElement.querySelector('.full-start-new__rate-line');
+
+        if (!rateLine) {
+            if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", `card: ${movieId}, Full card: Rate line not found. Skipping.`);
+            return;
+        }
+
+        // Удаляем старые метки и анимацию
+        rateLine.querySelectorAll('.lqe-full-card-quality').forEach(el => el.remove());
+
+        // Проверка для сериалов
+        if (movieType === 'tv' && !LQE_CONFIG.SHOW_QUALITY_FOR_TV_SERIES) {
+            if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", `card: ${movieId}, TV Series skipped by config.`);
+            return;
+        }
+
+        // 1. Проверка кэша
+        const cachedItem = getLqeCache(cardKey);
+        if (cachedItem) {
+            const translated = translateQualityLabel(0, cachedItem.quality_code);
+            addFullCardQualityElement(rateLine, translated);
+
+            // Если кэш требует обновления, ставим его в очередь
+            if (Date.now() - cachedItem.timestamp > LQE_CONFIG.CACHE_REFRESH_THRESHOLD_MS) {
+                lqeAddToQueue(cardKey, movieData, processFullCardQualityAsync, () => {
+                    // Здесь не нужно ничего делать, так как UI обновляется внутри processFullCardQualityAsync
+                });
+            }
+            return;
+        }
+
+        // 2. Если нет в кэше, добавляем анимацию загрузки
+        const loadingElement = document.createElement('div');
+        loadingElement.className = 'lqe-full-card-quality lqe-loading';
+        loadingElement.textContent = LQE_CONFIG.QUALITY_MID_LABEL; // Заполнитель
+        rateLine.appendChild(loadingElement);
+        if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", `card: ${movieId}, Add loading animation`);
+
+        // 3. Добавляем задачу в очередь на полный расчет
+        lqeAddToQueue(cardKey, movieData, processFullCardQualityAsync, () => {
+            // Удаляем анимацию после завершения
+            loadingElement.remove();
+        });
+    };
+
+    /**
+     * Вспомогательная функция для добавления элемента качества на полную карточку.
+     * @param {HTMLElement} rateLine - Элемент, куда добавлять метку.
+     * @param {{label: string, color: string, bg: string}} translated - Результат translateQualityLabel.
+     */
+    const addFullCardQualityElement = (rateLine, translated) => {
+        // Удаляем старые метки
+        rateLine.querySelectorAll('.lqe-full-card-quality').forEach(el => el.remove());
+
+        const qualityElement = document.createElement('div');
+        qualityElement.className = 'lqe-full-card-quality';
+        qualityElement.textContent = translated.label;
+        qualityElement.style.backgroundColor = translated.bg;
+        qualityElement.style.color = LQE_CONFIG.FULL_CARD_LABEL_TEXT_COLOR;
+
+        rateLine.appendChild(qualityElement);
+    };
+
+    /**
+     * Асинхронная функция для обработки качества и обновления UI полной карточки.
+     * @param {object} movieData - Данные фильма/сериала.
+     */
+    const processFullCardQualityAsync = async (movieData) => {
+        const movieId = movieData.id;
+        const movieType = movieData.media_type || (movieData.first_air_date ? 'tv' : 'movie');
+        const cardKey = `${movieType}_${movieId}`;
+
+        const normalizedData = {
+            id: movieData.id,
+            title: movieData.title || movieData.name || movieData.original_title || movieData.original_name,
+            original_title: movieData.original_title || movieData.original_name,
+            type: movieType,
+            release_date: movieData.release_date || movieData.first_air_date,
+            names: movieData.names || []
+        };
+        if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", `card: ${movieId}, Normalized full card data:`, normalizedData);
+
+        // 1. Получение лучшего релиза
+        const bestRelease = await getBestReleaseFromJacred(normalizedData);
+        if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", `card: ${movieId}, JacRed callback received for full card. Result:`, bestRelease);
+
+        // 2. Сохранение в кэш
+        setLqeCache(cardKey, { quality_code: bestRelease.quality, full_label: bestRelease.full_label });
+
+        // 3. Обновление UI
+        const translated = translateQualityLabel(0, bestRelease.quality);
+        const currentActivity = Lampa.Activity.active();
+
+        if (currentActivity && currentActivity.component === 'full' && currentGlobalMovieId === movieId) {
+            const renderElement = currentActivity.render();
+            const rateLine = renderElement.querySelector('.full-start-new__rate-line');
+
+            if (rateLine) {
+                // Удаляем анимацию загрузки
+                rateLine.querySelectorAll('.lqe-loading').forEach(el => el.remove());
+                addFullCardQualityElement(rateLine, translated);
+            }
+        }
+    };
+
+    // --- ИНИЦИАЛИЗАЦИЯ ПЛАГИНА ---
+
+    /**
+     * Менеджер видимости для списка карточек, предотвращает утечки памяти.
+     * Используется Intersection Observer.
+     */
+    const lqeCardVisibilityManager = (() => {
+        if (!('IntersectionObserver' in window)) {
+            console.warn("LQE-WARN", "Intersection Observer not supported. Disabling visibility manager.");
+            return {
+                observe: () => {},
+                unobserve: () => {}
+            };
+        }
+
+        const observer = new IntersectionObserver(
+            (entries) => {
+                entries.forEach(entry => {
+                    const card = entry.target;
+                    const cardKey = `${card.dataset.type}_${card.dataset.id}`;
+
+                    // Если карточка появляется в зоне видимости, и она еще не обработана в Set
+                    if (entry.isIntersecting && !LQE_PROCESSED_LIST_CARD_IDS.has(cardKey)) {
+                        // Важно: на этом этапе мы просто запускаем логику, которая проверит кэш
+                        updateCardListQuality(card);
+                    }
+                    // Если карточка уходит из зоны видимости, снимаем наблюдение
+                    // NOTE: Снятие наблюдения здесь может быть излишним, т.к. IntersectionObserver
+                    // не удаляет сам элемент из DOM, но позволяет сократить количество активных наблюдателей.
+                    // observer.unobserve(card);
+                });
+            },
+            { threshold: 0.1 } // Запускать, когда видно 10% элемента
+        );
 
         return {
-            observe: function(card) {
-                if (!card) return;
-                if (!isFallbackMode) {
-                    ensureObserver();
-                    if (observer) observer.observe(card);
-                }
-                requestAnimationFrame(function() {
-                    if (!card || !card.isConnected) return;
-                    if (card.hasAttribute('data-lqe-quality-processed') && isElementNearViewport(card, FALLBACK_MARGIN)) {
-                        enqueueCard(card);
-                        if (observer) observer.unobserve(card);
-                    }
-                });
+            observe: (card) => {
+                observer.observe(card);
+            },
+            unobserve: (card) => {
+                observer.unobserve(card);
             }
         };
     })();
 
-    // --- ЛОГИКА ---
-    var QUALITY_DISPLAY_MAP = {
-        "4K Web-DL 10bit HDR P81 HEVC": "4K", "UHD Blu-ray disc 2160p": "4K", "Hybrid (2160p)": "4K",
-        "4K Web-DL": "4K", "bluray": "4K", "bdremux": "4K", "webdl": "1080", "web-dl": "1080", "webrip": "1080",
-        "hdtvrip 2160p": "4K", "web-dlrip (2160p)": "4K", "WEB-DL 2160p": "4K",
-        "HDTVRip (1080p)": "1080", "HDTV": "1080", "HDTVRip 720p": "720", "hdrip": "720",
-        "bdrip": "720", "DVDRip": "720", "SD": "480",
-        "Telecine": "BAD", "tc": "BAD", "ts": "BAD", "camrip": "CamRip"
-    };
-
-    var LQE_LOW_QUALITY_REGEX_SOURCES = [
-        'telesync', 'telecine', 'camrip', 'экранка', 'звук с ts', 'audio ts', 'ts audio',
-        'hdts', 'hdcam', 'hdtc', 'webrip с ts', 'webrp\.ts', 'web-dl с ts', 'web-dl ts',
-        'zets', 'zet-ts', '\\bts\\b', '\\bad\\b'
-    ];
-    
-    var LQE_LOW_QUALITY_REGEX_COMPILED = new RegExp(LQE_LOW_QUALITY_REGEX_SOURCES.join('|'), 'i');
-
-    function lqeCheckIsLowQuality(title) {
-        if (!title) return false;
-        if (LQE_LOW_QUALITY_REGEX_COMPILED.test(title)) { 
-            if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "lqeCheckIsLowQuality: Matched low quality keyword.");
-            return true;
-        }
-        return false;
-    }
-
-    function getQualityColorGroup(displayQuality) {
-        if (!displayQuality) return 'low';
-        var quality = displayQuality.toLowerCase();
-        if (quality === '4k' || quality === '2k' || quality === '1080') return 'high';
-        if (quality === '720' || quality === '480') return 'mid';
-        return 'low';
-    }
-
-    function translateQualityLabel(qualityCode, fullTorrentTitle) {
-        if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "translateQualityLabel: Received qualityCode:", qualityCode, "fullTorrentTitle:", fullTorrentTitle);
-
-        const lowerFullTorrentTitle = (fullTorrentTitle || '').toLowerCase();
-        
-        if (qualityCode === LQE_QUALITY_NO_INFO_CODE) return LQE_QUALITY_NO_INFO_LABEL;
-        if (lqeCheckIsLowQuality(fullTorrentTitle)) {
-             if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "translateQualityLabel: Found low quality keyword. Triggering BAD category.");
-             return LQE_QUALITY_BAD_LABEL;
-        }
-
-        let numericQuality = parseInt(qualityCode, 10);
-        if (!isNaN(numericQuality) && numericQuality > 0) {
-            if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "translateQualityLabel: Using 'qualityCode' property:", numericQuality);
-            if (numericQuality >= 2160) return '4K';
-            if (numericQuality >= 1440) return '2K';
-            if (numericQuality >= 1080) return '1080';
-            if (numericQuality >= 720) return '720';
-            if (numericQuality >= 480) return '480';
-            return LQE_QUALITY_BAD_LABEL;
-        }
-
-        let numericFromTitle = extractNumericQualityFromTitle(lowerFullTorrentTitle);
-        if (numericFromTitle > 0) {
-            if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "translateQualityLabel: Using parsed 'title' resolution:", numericFromTitle);
-            if (numericFromTitle >= 2160) return '4K';
-            if (numericFromTitle >= 1440) return '2K';
-            if (numericFromTitle >= 1080) return '1080';
-            if (numericFromTitle >= 720) return '720';
-            if (numericFromTitle >= 480) return '480';
-            return LQE_QUALITY_BAD_LABEL;
-        }
-
-        for (const key in QUALITY_DISPLAY_MAP) {
-            if (QUALITY_DISPLAY_MAP.hasOwnProperty(key) && lowerFullTorrentTitle.includes(String(key).toLowerCase())) {
-                if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "translateQualityLabel: Map match for key \"" + key + "\".");
-                return QUALITY_DISPLAY_MAP[key];
-            }
-        }
-        return LQE_QUALITY_NO_INFO_LABEL;
-    }
-
-    function extractNumericQualityFromTitle(title) {
-        if (!title) return 0;
-        const lowerTitle = title.toLowerCase();
-        if (lowerTitle.includes('4k') || lowerTitle.includes('4к')) return 2160;
-        if (lowerTitle.includes('1440p')) return 1440;
-        if (lowerTitle.includes('1080p') || lowerTitle.includes('1080i')) return 1080;
-        if (lowerTitle.includes('720p')) return 720;
-        if (lowerTitle.includes('480p')) return 480;
-        if (lowerTitle.includes('360p')) return 360;
-        const match = lowerTitle.match(/(\d{3,4})p/);
-        return match ? parseInt(match[1], 10) : 0;
-    }
-
-    function extractYearFromTitle(title) {
-        if (!title) return 0;
-        const match = title.match(/[\(\[\/\.\s]((19|20)\d{2})[\)\]\/\.\s]/);
-        return match ? parseInt(match[1], 10) : 0;
-    }
-    
-    function lqeCleanTitleForComparison(title) {
-        if (!title) return '';
-        var cleaned = title.toLowerCase();
-        cleaned = cleaned.replace(/щ/g, 'ш').replace(/ё/g, 'е');
-        cleaned = cleaned.replace(/[^a-zа-я0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
-        return cleaned;
-    }
-
-    function calculateTorrentScore(torrentTitle, numericQuality, isLowQuality, torrentYear, searchYearNum, cardId, isTvSeries) {
-        let score = 0;
-        if (numericQuality >= 2160) score += 10000;
-        else if (numericQuality >= 1440) score += 7500;
-        else if (numericQuality >= 1080) score += 5000;
-        else if (numericQuality >= 720) score += 2000;
-        else if (numericQuality >= 480) score += 1000;
-        else if (numericQuality > 0) score -= 5000; // Штраф за < 480
-        
-        if (searchYearNum) {
-            let parsedYear = parseInt(torrentYear, 10) || extractYearFromTitle(torrentTitle);
-            if (parsedYear > 0) {
-                if (isTvSeries) {
-                    if (parsedYear === searchYearNum) score += 1000;
-                } else {
-                    var yearDiff = Math.abs(parsedYear - searchYearNum);
-                    if (yearDiff === 0) score += 2000;
-                    else if (yearDiff === 1) score += 1000;
-                    else score -= 100000;
-                }
-            }
-        }
-        
-        if (isLowQuality) score -= 10000;
-
-        const lowerTitle = torrentTitle.toLowerCase();
-        if (lowerTitle.includes('bdremux') || lowerTitle.includes('bd-disk') || lowerTitle.includes('blu-ray')) score += 500;
-        if (lowerTitle.includes('hevc') && numericQuality >= 1080) score += 300;
-
-        return score;
-    }
-
-    // --- СЕТЬ И API ---
-    function fetchWithProxy(url, cardId, callback) {
-        var currentProxyIndex = -1;
-        var callbackCalled = false;
-        var controller = new AbortController();
-        var signal = controller.signal;
-
-        function tryNext() {
-            currentProxyIndex++;
-            var fetchUrl;
-            if (currentProxyIndex === 0) {
-                fetchUrl = url;
-                if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "card: " + cardId + ", Fetch direct: " + fetchUrl);
-            } else if (currentProxyIndex <= LQE_CONFIG.PROXY_LIST.length) {
-                var proxyIndex = currentProxyIndex - 1;
-                fetchUrl = LQE_CONFIG.PROXY_LIST[proxyIndex] + encodeURIComponent(url);
-                if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "card: " + cardId + ", Fetch with proxy " + (proxyIndex + 1) + ": " + fetchUrl);
-            } else {
-                if (!callbackCalled) { callbackCalled = true; callback(new Error('All fetch strategies failed')); }
-                return;
-            }
-
-            var timeoutMs = (currentProxyIndex === 0) ? 5000 : LQE_CONFIG.PROXY_TIMEOUT_MS;
-            var timeoutId = setTimeout(function() { controller.abort(); }, timeoutMs);
-
-            fetch(fetchUrl, { signal: signal })
-                .then(function(response) {
-                    clearTimeout(timeoutId);
-                    if (!response.ok) throw new Error('Fetch error: ' + response.status);
-                    return response.text();
-                })
-                .then(function(data) {
-                    if (!callbackCalled) { callbackCalled = true; callback(null, data); }
-                })
-                .catch(function(error) {
-                    clearTimeout(timeoutId);
-                    if (error.name === 'AbortError') {
-                         if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "card: " + cardId + ", Fetch timeout for " + fetchUrl);
-                    } else {
-                         console.error("LQE-LOG", "card: " + cardId + ", Fetch error for " + fetchUrl + ":", error.message);
-                    }
-                    if (!callbackCalled) {
-                        controller = new AbortController();
-                        signal = controller.signal;
-                        tryNext();
-                    }
-                });
-        }
-        tryNext();
-    }
-
-    function getBestReleaseFromJacred(normalizedCard, cardId, callback) {
-        var dateStr = normalizedCard.release_date || normalizedCard.first_air_date;
-        var isTvSeries = normalizedCard.type === 'tv' || normalizedCard.name;
-        if (isTvSeries && dateStr) {
-            if (dateStr.substring(0, 4) === new Date().getFullYear().toString()) dateStr = '';
-        }
-        var tmdbYear = (dateStr.length >= 4) ? dateStr.substring(0, 4) : '';
-
-        // Подготовка массива названий
-        var validLocalTitles = [];
-        var cleanedOriginalTitleMain = lqeCleanTitleForComparison(normalizedCard.original_title);
-        var hasRussianChar = /[а-яё]/i;
-        var hasUkrainianChar = /[ґєії]/i;
-
-        function addTitleToValidList(name) {
-            var cn = lqeCleanTitleForComparison(name);
-            if (cn && cn !== cleanedOriginalTitleMain && validLocalTitles.indexOf(cn) === -1 && hasRussianChar.test(name) && !hasUkrainianChar.test(name)) {
-                validLocalTitles.push(cn);
-            }
-        }
-
-        if (normalizedCard.title) {
-            var cl = lqeCleanTitleForComparison(normalizedCard.title);
-            if (cl && cl !== cleanedOriginalTitleMain) validLocalTitles.push(cl);
-        }
-
-        if (Array.isArray(normalizedCard.names)) {
-            normalizedCard.names.forEach(addTitleToValidList);
-        }
-
-        // [v1.07] Глубокое сканирование TMDB, если нет names
-        function ensureNamesAndSearch() {
-            if (validLocalTitles.length <= 1 && (!normalizedCard.names || normalizedCard.names.length === 0)) {
-                var type = isTvSeries ? 'tv' : 'movie';
-                var tmdbUrl = 'https://tmdb.cub.rip/3/' + type + '/' + cardId + '?api_key=4ef0d7355d9ffb5151e987764708ce96&language=ru';
-                
-                if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "card: " + cardId + ", Names missing. Fetching deep details: " + tmdbUrl);
-
-                fetchWithProxy(tmdbUrl, cardId, function(err, data) {
-                    if (!err && data) {
-                        try {
-                            var tmdbData = JSON.parse(data);
-                            // Проверяем кастомное свойство 'names'
-                            if (Array.isArray(tmdbData.names)) {
-                                if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "card: " + cardId + ", Found custom 'names' property. Count: " + tmdbData.names.length);
-                                tmdbData.names.forEach(addTitleToValidList);
-                            }
-                            // На всякий случай проверяем и alternative_titles
-                            else if (tmdbData.alternative_titles && (tmdbData.alternative_titles.titles || tmdbData.alternative_titles.results)) {
-                                var titles = tmdbData.alternative_titles.titles || tmdbData.alternative_titles.results || [];
-                                if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "card: " + cardId + ", Found 'alternative_titles'. Count: " + titles.length);
-                                titles.forEach(function(t) {
-                                    if (t.title) addTitleToValidList(t.title);
-                                });
-                            }
-                        } catch (parseErr) {
-                            console.error("LQE-LOG", "TMDB parse error:", parseErr);
-                        }
-                    }
-                    startStrategies();
-                });
-            } else {
-                startStrategies();
-            }
-        }
-
-        function startStrategies() {
-            if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "card: " + cardId + ", Final valid local titles for search:", validLocalTitles);
-            if (searchStrategies.length > 0) executeNextStrategy(0);
-            else callback(null);
-        }
-
-        function searchJacredApi(searchTitle, searchYear, exactMatch, strategyName, expectedLocalTitle, expectedOriginalTitle, tmdbSearchYear, isTvSeries, apiCallback) {
-            var userId = Lampa.Storage.get('lampac_unic_id', '');
-            var apiUrl = LQE_CONFIG.JACRED_PROTOCOL + LQE_CONFIG.JACRED_URL + '/api/v1.0/torrents?search=' + encodeURIComponent(searchTitle) + (searchYear ? '&year=' + searchYear : '') + (exactMatch ? '&exact=true' : '') + '&uid=' + userId;
-            
-            if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "card: " + cardId + ", JacRed: " + strategyName + " URL: " + apiUrl);
-
-            fetchWithProxy(apiUrl, cardId, function(error, responseText) {
-                if (error || !responseText) { 
-                    if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "card: " + cardId + ", JacRed: " + strategyName + " failed or empty.");
-                    apiCallback(null); 
-                    return; 
-                }
-
-                try {
-                    var torrents = JSON.parse(responseText);
-                    if (!Array.isArray(torrents) || torrents.length === 0) { 
-                        if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "card: " + cardId + ", JacRed: " + strategyName + " received no torrents.");
-                        apiCallback(null); 
-                        return; 
-                    }
-
-                    var bestNumericQuality = -1;
-                    var bestFoundTorrent = null;
-                    var searchYearNum = parseInt(tmdbSearchYear, 10);
-                    var bestScore = -Infinity;
-
-                    var cleanedOriginalTitle = lqeCleanTitleForComparison(expectedOriginalTitle);
-
-                    for (var i = 0; i < torrents.length; i++) {
-                        var currentTorrent = torrents[i];
-                        var currentNumericQuality = parseInt(currentTorrent.quality, 10) || extractNumericQualityFromTitle(currentTorrent.title) || 0;
-                        var currentIsLowQuality = lqeCheckIsLowQuality(currentTorrent.title);
-                        var torrentYearFromObject = currentTorrent.relased || currentTorrent.released || currentTorrent.year;
-                        
-                        var cleanedTorrentTitleFallback = lqeCleanTitleForComparison(currentTorrent.title);
-                        var cleanedTorrentOriginal = lqeCleanTitleForComparison(currentTorrent.originalname);
-                        var cleanedTorrentLocal = lqeCleanTitleForComparison(currentTorrent.name);
-
-                        var titleMatchBonus = 0;
-                        var originalTitleMatched = false;
-                        var localTitleMatched = false;
-                        
-                        if (cleanedOriginalTitle.length > 0) {
-                            if ((cleanedTorrentOriginal.length > 0 && cleanedTorrentOriginal.includes(cleanedOriginalTitle)) || cleanedTorrentTitleFallback.includes(cleanedOriginalTitle)) {
-                                titleMatchBonus += 20000;
-                                originalTitleMatched = true;
-                            }
-                        }
-
-                        if (validLocalTitles.length > 0) {
-                            for (var t = 0; t < validLocalTitles.length; t++) {
-                                var targetTitle = validLocalTitles[t];
-                                if ((cleanedTorrentLocal.length > 0 && cleanedTorrentLocal.includes(targetTitle)) || cleanedTorrentTitleFallback.includes(targetTitle)) {
-                                    titleMatchBonus += 10000;
-                                    localTitleMatched = true;
-                                    break;
-                                }
-                            }
-                        } else if (validLocalTitles.length === 0 && localTitleMatched === false) {
-                            localTitleMatched = originalTitleMatched;
-                        }
-
-                        var isYearValidForOptim = true;
-                        if (!isTvSeries && searchYearNum) {
-                            var parsedYearForOptim = parseInt(torrentYearFromObject, 10) || extractYearFromTitle(currentTorrent.title);
-                            if (parsedYearForOptim > 0 && Math.abs(parsedYearForOptim - searchYearNum) > 1) isYearValidForOptim = false;
-                        }
-
-                        if (currentNumericQuality >= 2160 && isYearValidForOptim && originalTitleMatched && localTitleMatched && !currentIsLowQuality) {
-                             bestNumericQuality = currentNumericQuality;
-                             bestFoundTorrent = currentTorrent;
-                             bestScore = 1000000;
-                             if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "card: " + cardId + ", Optimization: Found 4K PERFECT MATCH. Stopping search.");
-                             break;
-                        }
-
-                        if (typeof currentNumericQuality !== 'number' || currentNumericQuality === 0) continue;
-                        
-                        var currentScore = calculateTorrentScore(currentTorrent.title, currentNumericQuality, currentIsLowQuality, torrentYearFromObject, searchYearNum, cardId, isTvSeries);
-                        currentScore += titleMatchBonus;
-
-                        if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "card: " + cardId + ", JacRed: Strategy " + strategyName + ", Torrent: " + currentTorrent.title + ", Score: " + currentScore);
-
-                        if (currentScore > bestScore) {
-                            bestScore = currentScore;
-                            bestFoundTorrent = currentTorrent;
-                            bestNumericQuality = currentNumericQuality;
-                        }
-                    }
-
-                    if (bestFoundTorrent && bestScore >= 0) {
-                        if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "card: " + cardId + ", JacRed: Best positive score torrent found in " + strategyName + " with score " + bestScore + " and quality " + (bestFoundTorrent.quality || bestNumericQuality) + "p");
-                        apiCallback({ quality: bestFoundTorrent.quality || bestNumericQuality, full_label: bestFoundTorrent.title });
-                    } else {
-                        if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "card: " + cardId + ", JacRed: No suitable torrents found in " + strategyName + ".");
-                        apiCallback(null);
-                    }
-                } catch (e) { 
-                    console.error("LQE-LOG", "card: " + cardId + ", JacRed parsing error:", e);
-                    apiCallback(null); 
-                }
-            });
-        }
-
-        var searchStrategies = [];
-        var originalTitleExists = normalizedCard.original_title && (/[a-zа-яё]/i.test(normalizedCard.original_title) || /^\d+$/.test(normalizedCard.original_title));
-        var titleExists = normalizedCard.title && (/[a-zа-яё]/i.test(normalizedCard.title) || /^\d+$/.test(normalizedCard.title));
-
-        if (originalTitleExists && tmdbYear) searchStrategies.push({ title: normalizedCard.original_title.trim(), year: tmdbYear, exact: true, name: "OriginalTitle_Year" });
-        if (originalTitleExists) searchStrategies.push({ title: normalizedCard.original_title.trim(), year: '', exact: true, name: "OriginalTitle_NoYear" });
-        if (titleExists && tmdbYear && (!originalTitleExists || normalizedCard.title.trim() !== normalizedCard.original_title.trim())) {
-            searchStrategies.push({ title: normalizedCard.title.trim(), year: tmdbYear, exact: true, name: "LocalTitle_Year_Fallback" });
-        }
-        if (titleExists && (!originalTitleExists || normalizedCard.title.trim() !== normalizedCard.original_title.trim())) {
-            searchStrategies.push({ title: normalizedCard.title.trim(), year: '', exact: true, name: "LocalTitle_NoYear_Fallback" });
-        }
-
-        function executeNextStrategy(index) {
-            if (index >= searchStrategies.length) { 
-                if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "card: " + cardId + ", JacRed: All strategies failed.");
-                callback(null); return; 
-            }
-            var strategy = searchStrategies[index];
-            searchJacredApi(strategy.title, strategy.year, strategy.exact, strategy.name, normalizedCard.title, normalizedCard.original_title, tmdbYear, isTvSeries, function(result) {
-                if (result && (result.quality || result.full_label)) callback(result);
-                else executeNextStrategy(index + 1);
-            });
-        }
-
-        ensureNamesAndSearch();
-    }
-
-    // --- UI ---
-    var styleLQE = "<style id=\"lampa_quality_styles\">" +
-    ".full-start-new__rate-line { flex-wrap: wrap; gap: 0.4em 0; }" +
-    ".full-start-new__rate-line > * { margin-right: 0.4em !important; flex-shrink: 0; flex-grow: 0; }" +
-    ".full-start-new__rate-line .full-start__pg, .full-start-new__rate-line .full-start__status, .full-start-new__rate-line .lqe-quality{" +
-    " font-weight: " + LQE_CONFIG.FULL_CARD_LABEL_FONT_WEIGHT + "; font-size: " + LQE_CONFIG.FULL_CARD_LABEL_FONT_SIZE + "; border-radius: " + LQE_CONFIG.FULL_CARD_LABEL_BORDER_RADIUS + "; padding: " + LQE_CONFIG.FULL_CARD_LABEL_PADDING + "; }" +
-    ".lqe-quality { min-width: 2.8em; text-align: center; text-transform: none; border: " + LQE_CONFIG.FULL_CARD_LABEL_BORDER + "; background-color: " + LQE_CONFIG.FULL_CARD_LABEL_BACKGROUND_COLOR + "; color: " + LQE_CONFIG.FULL_CARD_LABEL_TEXT_COLOR + "; }" +
-    ".card__view { position: relative !important; }" +
-    ".card__icons-inner, .card__quality, .card__vote { background-color: " + LQE_CONFIG.LIST_CARD_LABEL_BACKGROUND_COLOR + "; border-radius: 0.7em; }" +
-    ".card__icons-inner { flex-direction: column-reverse; justify-content: center; flex-wrap: wrap; align-content: center; }" +
-    ".card__quality, .card__vote { padding: 0.4em 0.6em; font-size: " + LQE_CONFIG.LIST_CARD_LABEL_FONT_SIZE + "; font-weight: " + LQE_CONFIG.LIST_CARD_LABEL_FONT_WEIGHT + "; color: " + LQE_CONFIG.LIST_CARD_LABEL_TEXT_COLOR + "; white-space: nowrap; text-shadow: 0.5px 0.5px 1px rgba(0,0,0,0.3) !important; }" +
-    ".card__icons { top: 0.3em; left: unset; right: 0.3em; }" +    
-    ".card__quality { position: absolute !important; bottom: unset; top: 0.3em; left: 0.3em; z-index: 1; width: fit-content; max-width: calc(100% - 1em); overflow: hidden; text-transform: uppercase; }" +
-    "body.light--version .card__icons-inner { -webkit-border-radius: 0; -moz-border-radius: 0; border-radius: 0; }" +
-    "</style>";
-    Lampa.Template.add('lampa_quality_css', styleLQE);
-    $('body').append(Lampa.Template.get('lampa_quality_css', {}, true));
-
-    var loadingStylesLQE = "<style id=\"lampa_quality_loading_animation\">" +
-        ".loading-dots-container { position: absolute; top: 50%; left: 0; right: 0; text-align: left; transform: translateY(-50%); z-index: 10; }" +
-        ".full-start-new__rate-line { position: relative; }" +
-        ".loading-dots { display: inline-flex; align-items: center; gap: 0.4em; color: #ffffff; font-size: 0.7em; background: rgba(0, 0, 0, 0.3); padding: 0.6em 1em; border-radius: 0.5em; }" +
-        ".loading-dots__text { margin-right: 1em; }" +
-        ".loading-dots__dot { width: 0.5em; height: 0.5em; border-radius: 50%; background-color: currentColor; opacity: 0.3; animation: loading-dots-fade 1.5s infinite both; }" +
-        ".loading-dots__dot:nth-child(1) { animation-delay: 0s; }" +
-        ".loading-dots__dot:nth-child(2) { animation-delay: 0.5s; }" +
-        ".loading-dots__dot:nth-child(3) { animation-delay: 1s; }" +
-        "@keyframes loading-dots-fade { 0%, 90%, 100% { opacity: 0.3; } 35% { opacity: 1; } }" +
-        "@media screen and (max-width: 480px) { .loading-dots-container { -webkit-justify-content: center; justify-content: center; text-align: center; max-width: 100%; }}" +
-        "</style>";
-    Lampa.Template.add('lampa_quality_loading_animation_css', loadingStylesLQE);
-    $('body').append(Lampa.Template.get('lampa_quality_loading_animation_css', {}, true));
-
-    function addLoadingAnimation(cardId, renderElement) {
-        if (!renderElement) return;
-        if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "card: " + cardId + ", Add loading animation");
-        var rateLine = $('.full-start-new__rate-line', renderElement);
-        if (!rateLine.length || $('.loading-dots-container', rateLine).length) return;
-        rateLine.append('<div class="loading-dots-container"><div class="loading-dots"><span class="loading-dots__text">Загрузка...</span><span class="loading-dots__dot"></span><span class="loading-dots__dot"></span><span class="loading-dots__dot"></span></div></div>');
-        $('.loading-dots-container', rateLine).css({ 'opacity': '1', 'visibility': 'visible' });
-    }
-
-    function removeLoadingAnimation(cardId, renderElement) {
-        if (!renderElement) return;
-        if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "card: " + cardId + ", Remove loading animation");
-        $('.loading-dots-container', renderElement).remove();
-    }
-
-    function getCardType(cardData) {
-        var type = cardData.media_type || cardData.type;
-        if (type === 'movie' || type === 'tv') return type;
-        return cardData.name || cardData.original_name ? 'tv' : 'movie';
-    }
-
-    function updateFullCardQualityElement(qualityCode, fullTorrentTitle, cardId, renderElement) {
-        if (!renderElement) return;
-        var rateLine = $('.full-start-new__rate-line', renderElement);
-        if (!rateLine.length) return;
-
-        $('.full-start__status.lqe-quality', renderElement).remove();
-
-        var displayQuality = translateQualityLabel(qualityCode, fullTorrentTitle);
-        if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "card: " + cardId + ", Displaying quality: " + displayQuality);
-
-        var div = document.createElement('div');
-        div.className = 'full-start__status lqe-quality';
-        div.textContent = displayQuality;
-
-        var colorGroup = getQualityColorGroup(displayQuality);
-        var bgColor = LQE_CONFIG.FULL_CARD_LABEL_BACKGROUND_COLOR;
-        if (colorGroup === 'high') bgColor = LQE_CONFIG.FULL_CARD_BG_HIGH;
-        else if (colorGroup === 'mid') bgColor = LQE_CONFIG.FULL_CARD_BG_MID;
-        else if (colorGroup === 'low') bgColor = LQE_CONFIG.FULL_CARD_BG_LOW;
-        div.style.backgroundColor = bgColor;
-
-        rateLine.append(div);
-    }
-
-    function updateCardListQualityElement(cardView, qualityCode, fullTorrentTitle, forceVisible, isBackground) {
-        if (!cardView) return;
-        var displayQuality = translateQualityLabel(qualityCode, fullTorrentTitle);
-        $('.card__quality', cardView).remove();
-
-        if (displayQuality !== LQE_QUALITY_NO_INFO_LABEL || forceVisible) {
-            var qualityDiv = document.createElement('div');
-            qualityDiv.className = 'card__quality';
-            if (qualityCode === LQE_QUALITY_NO_INFO_CODE && !forceVisible) qualityDiv.style.opacity = '0.01';
-            
-            var innerElement = document.createElement('div');
-            innerElement.textContent = displayQuality;
-
-            var colorGroup = getQualityColorGroup(displayQuality);
-            var textColor = LQE_CONFIG.LIST_CARD_LABEL_TEXT_COLOR;
-            if (colorGroup === 'high') textColor = LQE_CONFIG.LIST_CARD_TEXT_HIGH;
-            else if (colorGroup === 'mid') textColor = LQE_CONFIG.LIST_CARD_TEXT_MID;
-            else if (colorGroup === 'low') textColor = LQE_CONFIG.LIST_CARD_TEXT_LOW;
-            innerElement.style.color = textColor;
-
-            qualityDiv.appendChild(innerElement);
-            cardView.appendChild(qualityDiv);
-            if (forceVisible) qualityDiv.style.opacity = '1';
-        }
-    }
-
-    function processFullCardQuality(cardData, renderElement) {
-        if (!renderElement) return;
-        var cardId = cardData.id;
-        if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "card: " + cardId + ", Processing full card.");
-
-        var normalizedCard = {
-            id: cardData.id || '',
-            title: cardData.title || cardData.name || '',
-            original_title: cardData.original_original_name || cardData.original_name || cardData.original_title || '',
-            names: cardData.names || [],
-            type: getCardType(cardData),
-            release_date: cardData.release_date || cardData.first_air_date || ''
-        };
-        
-        var rateLine = $('.full-start-new__rate-line', renderElement);
-        if (rateLine.length) { rateLine.addClass('done'); addLoadingAnimation(cardId, renderElement); }
-        
-        if (!normalizedCard.release_date) {
-            removeLoadingAnimation(cardId, renderElement);
-            updateFullCardQualityElement(LQE_QUALITY_NO_INFO_CODE, LQE_QUALITY_NO_INFO_LABEL, cardId, renderElement);
-            return;
-        }
-
-        var isTvSeries = (normalizedCard.type === 'tv' || normalizedCard.name);
-        var cacheKey = LQE_CONFIG.CACHE_VERSION + '_' + (isTvSeries ? 'tv_' : 'movie_') + normalizedCard.id;
-        var cachedQualityData = getLqePersistentCacheStore().get(cacheKey);
-
-        if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "Cache check for " + cacheKey + ": " + (cachedQualityData ? "HIT" : "MISS"));
-
-        if (!(isTvSeries && LQE_CONFIG.SHOW_QUALITY_FOR_TV_SERIES === false)) {
-            if (cachedQualityData) {
-                updateFullCardQualityElement(cachedQualityData.quality_code, cachedQualityData.full_label, cardId, renderElement);
-                removeLoadingAnimation(cardId, renderElement);
-                queueLqeRequest(function(done) {
-                    getBestReleaseFromJacred(normalizedCard, cardId, function(jrResult) {
-                        var qualityCode = (jrResult && jrResult.quality) ? jrResult.quality : LQE_QUALITY_NO_INFO_CODE;
-                        var fullLabel = (jrResult && jrResult.full_label) ? jrResult.full_label : LQE_QUALITY_NO_INFO_LABEL;
-                        if (qualityCode !== cachedQualityData.quality_code) {
-                            if (LQE_CONFIG.LOGGING_QUALITY) console.log("LQE-QUALITY", "Updating cache from background fetch.");
-                            getLqePersistentCacheStore().set(cacheKey, { quality_code: qualityCode, full_label: fullLabel });
-                            updateFullCardQualityElement(qualityCode, fullLabel, cardId, renderElement);
-                        }
-                        done();
-                    });
-                });
-            } else {
-                var placeholder = document.createElement('div');
-                placeholder.className = 'full-start__status lqe-quality';
-                placeholder.textContent = LQE_QUALITY_NO_INFO_LABEL;
-                placeholder.style.opacity = '0.01';
-                if (!$('.full-start__status.lqe-quality', rateLine).length) rateLine.append(placeholder);
-
-                queueLqeRequest(function(done) {
-                    getBestReleaseFromJacred(normalizedCard, cardId, function(jrResult) {
-                        if (LQE_CONFIG.LOGGING_QUALITY) console.log('LQE-QUALITY', 'card: ' + cardId + ', JacRed callback result:', jrResult);
-                        var qualityCode = (jrResult && jrResult.quality) ? jrResult.quality : LQE_QUALITY_NO_INFO_CODE;
-                        var fullLabel = (jrResult && jrResult.full_label) ? jrResult.full_label : LQE_QUALITY_NO_INFO_LABEL;
-                        getLqePersistentCacheStore().set(cacheKey, { quality_code: qualityCode, full_label: fullLabel });
-                        if (document.body.contains(renderElement[0])) {
-                            updateFullCardQualityElement(qualityCode, fullLabel, cardId, renderElement);
-                            removeLoadingAnimation(cardId, renderElement);
-                        }
-                        done();
-                    });
-                });
-            }
-        } else {
-            removeLoadingAnimation(cardId, renderElement);
-        }
-    }
-
-    function updateCardListQuality(cardElement) {
-        if (cardElement.hasAttribute('data-lqe-quality-processed')) {
-        }
-        var cardView = cardElement.querySelector('.card__view');
-        var cardData = cardElement.card_data;
-        if (!cardData || !cardView) return;
-
-        var isTvSeries = (getCardType(cardData) === 'tv');
-        if (isTvSeries && LQE_CONFIG.SHOW_QUALITY_FOR_TV_SERIES === false) return;
-
-        var normalizedCard = {
-            id: cardData.id || '',
-            title: cardData.title || cardData.name || '',
-            original_title: cardData.original_original_name || cardData.original_name || cardData.original_title || '',
-            names: cardData.names || [],
-            type: getCardType(cardData),
-            release_date: cardData.release_date || cardData.first_air_date || ''
-        };
-        
-        if (!normalizedCard.release_date) {
-            updateCardListQualityElement(cardView, LQE_QUALITY_NO_INFO_CODE, LQE_QUALITY_NO_INFO_LABEL, true, false);
-            return;
-        }
-
-        var cacheKey = LQE_CONFIG.CACHE_VERSION + '_' + (isTvSeries ? 'tv_' : 'movie_') + normalizedCard.id;
-        var cachedQualityData = getLqePersistentCacheStore().get(cacheKey);
-
-        if (cachedQualityData) {
-            updateCardListQualityElement(cardView, cachedQualityData.quality_code, cachedQualityData.full_label, true, false);
-            queueLqeRequest(function(done) {
-                getBestReleaseFromJacred(normalizedCard, normalizedCard.id, function(jrResult) {
-                    var qualityCode = (jrResult && jrResult.quality) ? jrResult.quality : LQE_QUALITY_NO_INFO_CODE;
-                    var fullLabel = (jrResult && jrResult.full_label) ? jrResult.full_label : LQE_QUALITY_NO_INFO_LABEL;
-                    if (qualityCode !== cachedQualityData.quality_code) {
-                        getLqePersistentCacheStore().set(cacheKey, { quality_code: qualityCode, full_label: fullLabel });
-                        if (document.body.contains(cardElement)) {
-                            updateCardListQualityElement(cardView, qualityCode, fullLabel, true, true);
-                        }
-                    }
-                    done();
-                });
-            });
-        } else {
-            queueLqeRequest(function(done) {
-                getBestReleaseFromJacred(normalizedCard, normalizedCard.id, function(jrResult) {
-                    if (document.body.contains(cardElement)) {
-                        var qualityCode = (jrResult && jrResult.quality) ? jrResult.quality : LQE_QUALITY_NO_INFO_CODE;
-                        var fullLabel = (jrResult && jrResult.full_label) ? jrResult.full_label : LQE_QUALITY_NO_INFO_LABEL;
-                        getLqePersistentCacheStore().set(cacheKey, { quality_code: qualityCode, full_label: fullLabel });
-                        updateCardListQualityElement(cardView, qualityCode, fullLabel, true, false);
-                    }
-                    done();
-                });
-            });
-        }
-    }
-
-    var observer = new MutationObserver(function(mutations) {
-        var newCards = [];
-        for (var m = 0; m < mutations.length; m++) {
-            var mutation = mutations[m];
-            if (mutation.addedNodes) {
-                for (var j = 0; j < mutation.addedNodes.length; j++) {
-                    var node = mutation.addedNodes[j];
-                    if (node.nodeType !== 1) continue;
-                    if (node.classList && node.classList.contains('card')) newCards.push(node);
-                    var nestedCards = node.querySelectorAll('.card');
-                    for (var k = 0; k < nestedCards.length; k++) newCards.push(nestedCards[k]);
-                }
-            }
-        }
-        if (newCards.length) {
-            if (LQE_CONFIG.LOGGING_CARDLIST) console.log("LQE-CARDLIST", "Observer detected " + newCards.length + " new cards.");
-            newCards.forEach(function(card) {
-                if (!card.hasAttribute('data-lqe-quality-processed')) {
-                    var cardView = card.querySelector('.card__view');
-                    if (cardView) {
-                        updateCardListQualityElement(cardView, LQE_QUALITY_NO_INFO_CODE, LQE_QUALITY_NO_INFO_LABEL, false, false);
-                        card.setAttribute('data-lqe-quality-processed', 'true');
-                    }
-                    lqeCardVisibilityManager.observe(card);
-                }
-            });
-        }
-    });
-
-    function initializeLampaQualityPlugin() {
-        if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "Lampa Quality Enhancer: Plugin Initialization Started! (v1.07)");
+    /**
+     * Основная функция инициализации плагина.
+     */
+    const initializeLampaQualityPlugin = () => {
+        if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "Lampa Quality Enhancer: Plugin Initialization Started! (v1.08)");
         window.lampaQualityPlugin = true;
+
+        // 1. Инициализация кэша
+        initializeLqePersistentCache();
+
+        // 2. Добавление стилей в DOM
+        if (!document.getElementById('lampa_quality_styles')) {
+            document.head.insertAdjacentHTML('beforeend', styleLQE.trim());
+        }
+
+        // 3. Mutation Observer для отслеживания новых карточек в списках
+        const observer = new MutationObserver((mutationsList, observer) => {
+            // Перебираем все изменения в DOM
+            mutationsList.forEach(mutation => {
+                // Ищем добавленные узлы
+                if (mutation.addedNodes) {
+                    mutation.addedNodes.forEach(node => {
+                        // Ищем .card элементы
+                        if (node.classList && node.classList.contains('card')) {
+                            // Если карточка добавлена, ставим её на наблюдение видимости
+                            lqeCardVisibilityManager.observe(node);
+                        } else if (node.querySelectorAll) {
+                            // Ищем .card элементы внутри добавленного узла (например, если загрузился целый список)
+                            node.querySelectorAll('.card').forEach(card => {
+                                lqeCardVisibilityManager.observe(card);
+                            });
+                        }
+                    });
+                }
+            });
+        });
+
         observer.observe(document.body, { childList: true, subtree: true });
-        Lampa.Listener.follow('full', function(event) {
-            if (event.type == 'complite') {
-                var renderElement = event.object.activity.render();
+        if (LQE_CONFIG.LOGGING_GENERAL) console.log('LQE-LOG: Initial observer for card lists started.');
+
+        // 4. Слушатель для полной карточки (при открытии)
+        Lampa.Listener.follow('full', (event) => {
+            if (event.type === 'complite') {
+                const renderElement = event.object.activity.render();
                 currentGlobalMovieId = event.data.movie.id;
                 if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "Full card event 'complite' for ID:", currentGlobalMovieId);
                 processFullCardQuality(event.data.movie, renderElement);
             }
         });
-        Lampa.Listener.follow('full', function(event) {
-            if (event.type == 'destroy') {
-                if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "Full card event 'destroy'.");
+
+        // 5. Слушатель для полной карточки (при закрытии)
+        Lampa.Listener.follow('full', (event) => {
+            if (event.type === 'destroy') {
+                if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "Full card event 'destroy'. Clearing global ID.");
                 currentGlobalMovieId = null;
             }
         });
-    }
+    };
 
+    // Запуск плагина
     if (window.lampaQualityPlugin) {
         if (LQE_CONFIG.LOGGING_GENERAL) console.log("LQE-LOG", "Plugin already loaded. Skipping initialization.");
     } else {
-        initializeLampaQualityPlugin();
+        // Запуск через setTimeout для гарантии загрузки Lampa.Storage и Lampa.Listener
+        setTimeout(initializeLampaQualityPlugin, 100);
     }
+
 })();
